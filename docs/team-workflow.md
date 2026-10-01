@@ -44,8 +44,8 @@ Typically, the following sequence of steps describes the workflow of one of our 
     git pull
     ```
 
-    > [!NOTE]
-    > It helps to stay up-to-date with others, and prevent merge conflicts beforehand (fail fast).
+> [!NOTE]
+> It helps to stay up-to-date with others, and prevent merge conflicts beforehand (fail fast).
 
 3. **Create and switch to a separate branch** related to the Jira work-item following [branch naming guidelines](../CONTRIBUTING.md#branch-naming):
 
@@ -53,8 +53,8 @@ Typically, the following sequence of steps describes the workflow of one of our 
     git switch -c <type>/<jira-issue-key>-<description>
     ```
 
-    > [!IMPORTANT]
-    > **Always** include Jira issue key inside of the branch name, so if Jira is integrated with GitHub it could link it to the branch created (it also helps to understand exactly which branch relates to what).
+> [!IMPORTANT]
+> **Always** include Jira issue key inside of the branch name, so if Jira is integrated with GitHub it could link it to the branch created (it also helps to understand exactly which branch relates to what).
 
 4. **Stage and commit changes** following [commit message guidelines](../CONTRIBUTING.md#commit-message-format):
 
@@ -82,5 +82,5 @@ Typically, the following sequence of steps describes the workflow of one of our 
 
     **Otherwise** move the issue back to In Progress and return to step 4.
 
-    > [!NOTE]
-    > Why **squash and merge** but not **merge commit** or **rebase**? A single "squashed" commit is easier to `git revert` than multiple of them.
+> [!NOTE]
+> Why **squash and merge** but not **merge commit** or **rebase**? A single "squashed" commit is easier to `git revert` than multiple of them.
