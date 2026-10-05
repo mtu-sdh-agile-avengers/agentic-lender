@@ -1,0 +1,6 @@
+ai/.venv/
+ai/.env
+ai/ml/data/
+ai/ml/models/
+__pycache__/
+*.joblib
