@@ -1,9 +1,3 @@
-ai/.venv/
-ai/.env
-ai/ml/data/
-ai/ml/models/
-*.joblib
-
 # Environments
 .env
 .envrc

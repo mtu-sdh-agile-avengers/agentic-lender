@@ -28,4 +28,7 @@
 
 ## Verdict
 
-_Fill this in: can this dataset train the AVM? What is missing?_
+Rejected. 90,000 rows, but no floor area, bedrooms or BER — only price, date,
+postcode, property type code and administrative area. It cannot train the same
+model and therefore cannot serve as a fallback for Daft.ie. The product is also
+Irish, so UK sale prices would need justification we do not have.

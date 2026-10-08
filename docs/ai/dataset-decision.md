@@ -4,31 +4,40 @@
 
 ## Context
 
-The AL-AI Engine needs an Automated Valuation Model (AVM) that estimates a fair
-market price for an Irish residential property from the attributes a borrower
-enters in AL-Mobile: county, floor area, bedrooms, property type and BER rating.
+## Context
+
+The AL-AI Engine needs an Automated Valuation Model (AVM) — a supervised
+regression model that estimates a fair market price for an Irish residential
+property. The project specification defines the input: borrowers "enter target
+property specifications (location/county, square meters/footage, bedrooms,
+property type, and BER/energy rating) to query an automated valuation estimate
+from the ML model".
+
 The Valuation Agent then compares that estimate against the seller's asking
-price to compute a verified Loan-to-Value ratio and flag overvalued collateral.
+price to compute a verified Loan-to-Value ratio (LTV) and flag overvalued
+collateral.
 
-Four datasets were proposed in the project brief. All four were downloaded and
-profiled with `ai/ml/explore_dataset.py`; the generated profiles are in
-`ai/ml/reports/`.
+Terms used in this document: AVM (Automated Valuation Model), ML (Machine
+Learning), BER (Building Energy Rating), LTV (Loan-to-Value), MAE (Mean
+Absolute Error), RMSE (Root Mean Squared Error), MAPE (Mean Absolute Percentage
+Error), R² (coefficient of determination), PPR (Property Price Register)..
 
-## Candidates at a glance
+## Summary
 
-| Dataset | Rows | Price | Floor area | Beds | BER | Location | Verdict |
-|---|---|---|---|---|---|---|---|
-| Ireland House Properties 2024 (Daft.ie) | 14,289 | yes (asking) | yes | yes | yes | county + coordinates | **Selected for training** |
-| Irish Property Price Register (PPR) | 804,233 | yes (sale) | band only, mostly empty | no | no | county + address | Supporting role |
-| UK House Price 2015-2024 | 90,000 | yes (sale) | no | no | no | postcode + county | Rejected |
-| Kaggle Loan Prediction | 614 | n/a | no | no | no | urban/rural flag | Rejected for valuation |
+Train the AVM on **Ireland House Properties 2024 (Daft.ie)** — the only
+candidate where the price and the property features the borrower enters appear
+in the same table. Use the **Property Price Register** as supporting data: it
+validates our price levels against real sales and can supply a county
+price-trend feature later. The other two datasets are rejected.
 
-## Decision
+| Dataset | Rows | Decision | Reason |
+|---|---|---|---|
+| Ireland House Properties 2024 (Daft.ie) | 14,289 | **Selected for training** | Price plus every required feature: county, floor area, bedrooms, property type, BER, and coordinates for 99.8% of listings |
+| Irish Property Price Register (PPR) | 804,233 | Supporting data | Real sale prices, but no bedrooms, floor area or BER, so it cannot train a feature-based model |
+| UK House Price 2015-2024 | 90,000 | Rejected | No floor area, bedrooms or BER; also a different country from our product |
+| Kaggle Loan Prediction | 614 | Rejected | Predicts loan approval, not property price; only 614 rows and contains protected attributes |
 
-Train the AVM on the **Daft.ie 2024** dataset. Use the **Property Price
-Register** to validate the price level and as a future source for a county
-price-trend feature. Reject the UK and Loan Prediction datasets for this model.
-
+Each decision is explained in detail below.
 ## Why Daft.ie
 
 It is the only candidate where the target (price) and the predictive features

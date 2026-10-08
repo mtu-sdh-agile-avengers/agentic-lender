@@ -36,4 +36,13 @@
 
 ## Verdict
 
-_Fill this in: can this dataset train the AVM? What is missing?_
+Selected as the training dataset. The only candidate carrying price and
+property features in one table: county, floor area, bedrooms, bathrooms, BER
+and coordinates (99.8% complete).
+
+Cleaning required: `Price` is text with 983 "Price on Application" rows;
+2,713 `Site` rows are land, not dwellings; six Northern Ireland counties are
+priced in GBP; floor area reaches 1,821,087 m²; BER is 22% missing plus 843
+`SI_666` exemption codes. 14,289 rows reduce to 10,192 usable.
+
+Limitation: these are asking prices, not sale prices.

@@ -34,4 +34,12 @@
 
 ## Verdict
 
-_Fill this in: can this dataset train the AVM? What is missing?_
+Rejected for the valuation model. This dataset predicts loan approval
+(`Loan_Status`), not property price — there is no price target and no property
+attributes beyond an urban/rural flag. At 614 rows it is also far too small.
+
+It contains `Gender`, `Married` and `Dependents`, which are protected
+characteristics we must not train on (AGT-12). If an approval-likelihood score
+is added later, those three columns must be dropped first.
+
+Kept as an ethics example for the report.
