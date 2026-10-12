@@ -8,7 +8,7 @@ from loguru import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.debug("Server startup")
+    logger.debug("Server startup"
     yield
     logger.debug("Server shutdown")
     
