@@ -4,8 +4,6 @@
 
 ## Context
 
-## Context
-
 The AL-AI Engine needs an Automated Valuation Model (AVM) — a supervised
 regression model that estimates a fair market price for an Irish residential
 property. The project specification defines the input: borrowers "enter target
