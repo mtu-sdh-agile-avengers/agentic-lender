@@ -5,30 +5,44 @@ from contextlib import asynccontextmanager
 
 from loguru import logger
 
+from src.firebase.connection import init_firebase
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.debug("Server startup"
+    logger.debug("Server startup")
+    await init_firebase()
+    await load_routers(app)
     yield
     logger.debug("Server shutdown")
     
+async def load_routers(app: FastAPI):
+    ...
 
-app = FastAPI(
+
+api = FastAPI(
     lifespan=lifespan,
-    title="AL-Core"
+    title="AL-Core",
+    description="REST API for Agentic Lender!",
+    root_path="/api/v1",
+    docs_url=None,
+    openapi_url="/docs/openapi.json",
+    redoc_url="/docs",
     )
 
-@app.get("/")
+
+@api.get("/")
 async def root():
-    logger.debug("GET root route requested")
+    logger.debug("GET root route requested") 
     return RedirectResponse("/health")
 
-@app.get("/health")
+@api.get("/health")
 async def health():
     logger.debug("GET health route requested")
-    return {"status": status.HTTP_200_OK}
+    return {"status": "ok"}
 
-# uvicorn main:app --app-dir src --reload
-if __name__ == "__main__":
+
+# uvicorn main:api --app-dir src --reload | uv run pytest -v
+if __name__ == "__main__":    
     import uvicorn
-    uvicorn.run("main:app", reload=True)
+    uvicorn.run("main:api", reload = True, port = 8000)
