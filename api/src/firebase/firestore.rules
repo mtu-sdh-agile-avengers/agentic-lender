@@ -1,0 +1,17 @@
+// Security rules protect only from the direct access of the clients (web, mobile), which are using Firebase Client SDK 
+// (i.e., Firebase Admin SDK bypasses rules below).
+
+rules_version = '2';
+
+service cloud.firestore {
+
+  // Clients can access data only through sending requests to AL-Core, not directly* (writes are restricted, but direct reads are allowed !!!depending on the feature!!!).
+  match /databases/{database}/documents {
+    
+    // users collection
+    match /users/{uid} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+    }
+  }
+}

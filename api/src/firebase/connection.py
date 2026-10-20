@@ -1,14 +1,17 @@
 """Firebase Admin SDK setup.
-
 NOTE: "`app`" parameter is not utilized, since only one, i.e. default, Firebase app being used by AL-Core.
 """
+
+import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore_async
 from google.cloud.firestore import AsyncClient
 from loguru import logger
+from src.config import RunMode, get_config
 
-from src.config import get_config
+_FIRESTORE_EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
+_FIREBASE_AUTH_EMULATOR_ENV = "FIREBASE_AUTH_EMULATOR_HOST"
 
 
 def init_firebase() -> None:
@@ -28,8 +31,25 @@ def init_firebase() -> None:
         except FileNotFoundError:
             logger.error("Service account key .json file not found")
             raise
-        firebase_admin.initialize_app(cred)
-        logger.success("Firebase initialized successfully!")
+
+        # "demo" prefix allows app and code to interact with emulators only (all is local)
+        if get_config().run_mode == RunMode.DEV:
+            os.environ[_FIRESTORE_EMULATOR_ENV] = (
+                get_config().firestore_emulator_host
+            )  # allows automatically connect to Cloud Firestore emulator
+            os.environ[_FIREBASE_AUTH_EMULATOR_ENV] = (
+                get_config().firebase_auth_emulator_host
+            )  # allows automatically connect to Firebase Auth emulator
+            options = {
+                "projectId": f"demo-{cred.project_id}"
+            }  # emulator suit starts with "--project demo-agentic-lender" CLA, therefore app should have the same project_id to connect
+        else:
+            os.environ.pop(_FIRESTORE_EMULATOR_ENV, None)
+            os.environ.pop(_FIREBASE_AUTH_EMULATOR_ENV, None)
+            options = None
+
+        firebase_admin.initialize_app(cred, options)
+        logger.success("Firebase initialized successfully")
 
 
 # "`db_id`" parameter may be required in the future, when there is possibly will be more than one Cloud Firestore database.
@@ -42,4 +62,6 @@ def get_firestore(db_id: str | None = None) -> AsyncClient:
     Returns:
         AsyncClient: async Firestore client object.
     """
-    return firestore_async.client(database_id=db_id)
+    return firestore_async.client(
+        database_id=db_id or get_config().firestore_database_name
+    )
