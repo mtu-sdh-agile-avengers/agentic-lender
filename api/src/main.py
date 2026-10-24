@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 from loguru import logger
 from src.config import get_config
 from src.firebase.connection import get_firestore, init_firebase
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
@@ -36,7 +37,18 @@ app = FastAPI(
     redoc_url="/docs",
 )
 
-load_routers(app)
+# CORS configuration
+origins = [
+    "http://localhost:3000", # default react app port
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 
 @app.get("/", tags=["root"])
@@ -49,6 +61,9 @@ async def root():
 async def health():
     logger.debug("GET health route requested")
     return {"status": "ok"}
+
+
+load_routers(app)
 
 
 # uvicorn src.main:app --port 8000 --reload | uv run pytest -v
