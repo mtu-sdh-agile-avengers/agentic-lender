@@ -15,9 +15,9 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
-from api.src.users.models import CurrentUserModel
-from auth.enums import Role, SignInProvider
-from auth.exceptions import ForbiddenException, UnauthorizedException
+from src.auth.models import CurrentUserModel
+from src.auth.enums import Role, SignInProvider
+from src.auth.exceptions import ForbiddenException, UnauthorizedException
 
 
 bearer_token = HTTPBearer(auto_error=False)
@@ -58,13 +58,19 @@ def get_current_user(
     """
     return CurrentUserModel(
         uid=decoded_token["uid"],
-        email=decoded_token.get("email"),
+        
+        email=decoded_token["email"],
         email_verified=decoded_token.get("email_verified", False),
-        role=Role.parse(decoded_token.get("role")),
+        photo_url=decoded_token.get("photo_url", None),
+        
         sign_in_provider=SignInProvider.parse(
             decoded_token.get("firebase", {}).get("sign_in_provider")
         ),
+        
+        role=Role.parse(decoded_token.get("role"))
     )
+    
+CurrentUserDep = Annotated[CurrentUserModel, Depends(get_current_user)]
 
 
 def require_roles(
@@ -76,7 +82,7 @@ def require_roles(
         *allowed_roles: roles permitted on the route.
 
     Returns:
-        _type_: _description_
+        Callable[[CurrentUserModel], CurrentUserModel]: Closure, allowing to protect routes with RBAC.
 
     Raises:
         ValueError: if no roles has been passed.

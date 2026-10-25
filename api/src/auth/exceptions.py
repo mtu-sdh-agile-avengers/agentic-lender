@@ -1,20 +1,13 @@
 from fastapi import HTTPException, status
 
 
-class UnauthorizedException(HTTPException):
-    def __init__(
-        self,
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized",
-        headers={"WWW-Authentificate": "Bearer"},
-    ) -> None:
-        super().__init__(status_code, detail, headers)
+class UserAuthError(HTTPException):
+    """base exception class for user auth accounts (firebase auth)"""
 
+class UnauthorizedException(UserAuthError):
+    def __init__(self) -> None:
+        super().__init__(status.HTTP_401_UNAUTHORIZED, "Unauthorized", {"WWW-Authentificate": "Bearer"})
 
-class ForbiddenException(HTTPException):
-    def __init__(
-        self, 
-        status_code=status.HTTP_403_FORBIDDEN, 
-        detail="Forbidden"
-    ) -> None:
-        super().__init__(status_code, detail)
+class ForbiddenException(UserAuthError):
+    def __init__(self) -> None:
+        super().__init__(status.HTTP_403_FORBIDDEN, "Forbidden")
