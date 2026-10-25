@@ -41,9 +41,9 @@ There are following rules, which are strictly adhered:
 - **read / write access**: Only the AL-Core subsystem has write access (through Firebase Admin SDK) to the database; all others (web and mobile clients, AI engine) have read-only access (through Firebase Client SDK), described by Firestore security rules (`.\api\src\firebase\firestore.rules`). However, it is assumed that they will use the AL-Core API for both reading and writing, rather than accessing the database directly.
 
 - **data sources**:
-  - **Firebase Auth** -> end-users credentials, custom claims (role, sign-in provider).
+  - **Firebase Auth** -> end-users credentials, custom claims (i.e., role).
   - **Etherum blockchain** -> minted loan notes and audit hashes; Firestore keeps pointers to them (transaction hash, token ID).
-  - **Stripe / PayPal sandbox** -> payment state; Firestore mirrors it from webhooks
+  - **Stripe / PayPal sandbox** -> payment state; Firestore mirrors it from webhooks.
   - **Cloud Firestore** -> all other data relevant to the users.  
 
 - **naming**: Collections and fields are named with plural in snake_case.
@@ -239,12 +239,9 @@ first sign-in.
 |----------------|----------------|-------|-----------|--------------------------------------------------------------------------------------------------|
 | uid            | str            | x     | auth      | Firebase Auth uid; must be a string between 1-128 characters long inclusive                      |
 | email          | str            | x     | auth      | The user's primary email; must be a valid email address                                          |
-| email_verified | bool           | x     | auth      | Whether or not the user's primary email is verified; the default value is False                  |
-| phone          | str            | -     | client    | The user's primary phone number; must be a valid E.164 spec compliant phone number               |
-| auth_provider  | SignInProvider | x     | auth      | The user's authentication provider (i.e., email_password, Google, GitHub)                        |
-| role           | Role           | x     | core      | The user's role (i.e., retail_borrower, mortgage_broker, underwriting_bank_officer)              |
+| phone          | str            | ?     | client    | The user's primary phone number; must be a valid E.164 spec compliant phone number               |
 | full_name      | str            | ?     | auth      | The user's full name                                                                             |
-| photo_url      | str            | -     | auth      | The user's photo URL (i.e., profile avatar image)                                                |
+| role           | Role           | x     | core      | The user's role (i.e., retail_borrower, mortgage_broker, underwriting_bank_officer)              |
 | created_at     | datetime       | x     | core      | Account creation time stamp                                                                      |
 | updated_at     | datetime       | x     | core      | Account details modification time stamp                                                          |
 
@@ -254,16 +251,16 @@ classDiagram
     <<collection>>
     uid: str 
     email: str
-    email_verified: bool
     phone: str | None
-    auth_provider: SignInProvider
-    role: Role
     full_name: str | None
-    photo_url: str | None
+    role: Role
     created_at: datetime
     updated_at: datetime
   }
 ```
+
+> [!IMPORTANT]
+> `email_verified`, `photo_url` and other user-related fields are not persisted in the Firestore database; instead, the user record is stored in Firebase Auth.
 
 ### valuations
 
