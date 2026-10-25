@@ -1,13 +1,13 @@
 # Contributing to Agentic Lender
 
 First off, thank you for considering contributing to our project :3! This document describes the guidelines that our team follows (it really helps to manage the work process :O), and we would like you, as a contributor, to adhere to them too:
-
-- [First contribution](#your-first-contribution)
-- [What about issues?](#what-about-a-issues)
-- [What about pull requests?](#what-about-a-pull-requests)
-- [Conventions guidelines](#conventions-guidelines)
-  - [Branch naming](#branch-naming)
-  - [Commit message](#commit-message-format)
+- [Contributing to Agentic Lender](#contributing-to-agentic-lender)
+  - [Your first contribution](#your-first-contribution)
+  - [What about a issues?](#what-about-a-issues)
+  - [What about a pull requests?](#what-about-a-pull-requests)
+  - [Conventions guidelines](#conventions-guidelines)
+    - [Branch naming](#branch-naming)
+    - [Commit message format](#commit-message-format)
 
 ## Your first contribution
 
