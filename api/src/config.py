@@ -22,8 +22,9 @@ class RunMode(StrEnum):
 
 
 class Config(BaseSettings):
-    google_application_credentials: str
     run_mode: Literal[RunMode.PROD, RunMode.DEV]
+    
+    google_application_credentials: str
     firestore_prod_database_name: str
     firestore_emulator_host: str
     firebase_auth_emulator_host: str

@@ -46,7 +46,7 @@ def init_firebase() -> None:
         else:
             os.environ.pop(_FIRESTORE_EMULATOR_ENV, None)
             os.environ.pop(_FIREBASE_AUTH_EMULATOR_ENV, None)
-            options = None
+            options = None # explicit projectId is not required, since credentials are used (service account key)
 
         firebase_admin.initialize_app(cred, options)
         logger.success("Firebase initialized successfully")

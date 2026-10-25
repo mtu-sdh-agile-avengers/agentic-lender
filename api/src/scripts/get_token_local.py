@@ -1,4 +1,5 @@
-"""Script intended to be used only in dev mode to generate ID and refresh token for the end-user."""
+"""DEPRECATED (use `seed_accounts.py` instead). Script intended to be used only in dev mode to generate ID and refresh token for the end-user.
+"""
 
 import sys
 import requests
