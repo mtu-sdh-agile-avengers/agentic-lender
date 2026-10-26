@@ -1,6 +1,6 @@
 """Script allowing create user account in Firebase Auth AND profile in Cloud Firestore.
 
-NOTE: could be used locally; depending on the .env file RUN_MODE varibable value.
+NOTE: could be used locally; depending on the .env file RUN_MODE variable value.
 """
 
 import argparse
