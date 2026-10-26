@@ -17,7 +17,7 @@ from firebase_admin import auth
 
 from src.auth.models import CurrentUserModel
 from src.auth.enums import Role, SignInProvider
-from src.auth.exceptions import ForbiddenException, UnauthorizedException
+from src.auth.exceptions import ForbiddenError, UnauthorizedError
 
 
 bearer_token = HTTPBearer(auto_error=False)
@@ -37,12 +37,12 @@ def verify_token(
         UnauthorizedException: if the token is missing, invalid or expired.
     """
     if token is None:
-        raise UnauthorizedException
+        raise UnauthorizedError
 
     try:
         return auth.verify_id_token(token.credentials)
     except auth.InvalidIdTokenError as exc:
-        raise UnauthorizedException from exc
+        raise UnauthorizedError from exc
 
 
 def get_current_user(
@@ -95,7 +95,7 @@ def require_roles(
         current_user: Annotated[CurrentUserModel, Depends(get_current_user)],
     ) -> CurrentUserModel:
         if current_user.role not in allowed_roles:
-            raise ForbiddenException
+            raise ForbiddenError
         return current_user
 
     return role_checker
