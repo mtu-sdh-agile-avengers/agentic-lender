@@ -1,6 +1,7 @@
 # Contributing to Agentic Lender
 
 First off, thank you for considering contributing to our project :3! This document describes the guidelines that our team follows (it really helps to manage the work process :O), and we would like you, as a contributor, to adhere to them too:
+
 - [Contributing to Agentic Lender](#contributing-to-agentic-lender)
   - [Your first contribution](#your-first-contribution)
   - [What about a issues?](#what-about-a-issues)
@@ -77,7 +78,7 @@ Before you open an issue, please search the issue tracker, maybe it already exis
 
 Simply follow [provided template](.github/PULL_REQUEST_TEMPLATE.md) and don't forget that:
 
-- **Title should follow [commit message format](#commit-message-format) + Jira issue key** (only if you have access to Jira workspace).
+- **Title should follow [commit message format](#commit-message-format) + Jira / GitHub issue key** (only if you have access to Jira workspace, or there is issue for changes you made).
 - **Description** explains what changed and how to test it, **contains link to the GitHub issue** (if applicable); add screenshots for UI changes.
 - **A PR is squashed and merged** when CI passes and at least one responsible team member approves it.
 
