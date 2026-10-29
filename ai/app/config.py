@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     # AL-Core's base URL, for posting deliberation results back
     core_base_url: str = "http://localhost:8000"
     # Only AL-Core and local tools should reach this service
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # machine learning
     model_path: Path = SERVICE_ROOT / "ml" / "models" / "avm_v1.joblib"
