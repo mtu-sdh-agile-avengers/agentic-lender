@@ -48,14 +48,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) # pyr
 
 # CORS configuration
 logger.debug("Configuring CORS...")
-origins = [
-    "http://localhost:3000", # default react app port
-    "http://127.0.0.1:3000",
-]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=get_config().cors_origins,
     allow_methods=["*"],
     allow_headers=["*"]
 )

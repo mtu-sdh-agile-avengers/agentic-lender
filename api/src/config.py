@@ -28,6 +28,9 @@ class Config(BaseSettings):
     firestore_prod_database_name: str
     firestore_emulator_host: str
     firebase_auth_emulator_host: str
+    
+    # if init. overriden by CORS_ORIGINS in .env for other ports
+    cors_origins: list[str]
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -50,5 +53,5 @@ def get_config() -> Config:
     """
 
     # Pyright sees required field(s) with no arguments passed and reports
-    # "Argument(s) missing for parameter(s)" error; pydantic-settings fills Config() from the `.env` fileuvicorn src.main:app --reload
+    # "Argument(s) missing for parameter(s)" error; pydantic-settings fills Config() from the `.env` file
     return Config()  # pyright: ignore[reportCallIssue]
