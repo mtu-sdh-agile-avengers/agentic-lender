@@ -188,6 +188,11 @@ tbody tr:hover { background: #f0fafd; }
 .login-art-copy h2 em { color: #d7f4ba; }
 :focus-visible { outline-color: #398c3d; }
 
+.auth-loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--forest); }
+.login-card .auth-error, .auth-error { color: #a5354e; background: #fff0f2; border: 1px solid #efc9d0; border-radius: 6px; padding: 12px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.login-card .auth-notice { color: #286d37; font-size: 13px; line-height: 1.5; }
+.login-card button:disabled, .logout:disabled { opacity: .6; cursor: wait; }
+
 .settings-form { max-width: 1100px; padding-bottom: 20px; }
 .settings-section { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr); gap: 40px; padding: 28px 0; border-bottom: 1px solid var(--line); }
 .settings-section-title { display: flex; align-items: flex-start; gap: 12px; }

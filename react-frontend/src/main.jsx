@@ -10,6 +10,12 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import './aero.css';
+import {authConfigurationError} from './firebase.js';
+import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
+import {authErrorMessage} from './authErrors.js';
+
+
+
 
 const navItems = [
   ['dashboard','Dashboard',Home],
@@ -28,6 +34,9 @@ const applicationRows = [
 ];
 
 function App(){
+  const [session,setSession]=useState({user:null,loading:!authConfigurationError,error:''});
+  const [loggingOut,setLoggingOut]=useState(false);
+  const [logoutError,setLogoutError]=useState('');
   const [preferences,setPreferences]=useState(loadPreferences);
   useEffect(()=>{
     document.documentElement.dataset.density=preferences.density;
@@ -39,13 +48,46 @@ function App(){
   const [decision,setDecision] = useState('Approve');
   const [scenario,setScenario] = useState({economic:'Recession', rate:2, price:-20});
 
-  if(page==='login') return <Login setPage={setPage} role={role} setRole={setRole}/>;
+  useEffect(()=>{
+    if(authConfigurationError) return;
+    let version=0;
+    const unsubscribe=observeSession(async user=>{
+      const current=++version;
+      setSession({user:null,loading:true,error:''});
+      try {
+        // Validate restoration before showing the workspace; never store the token ourselves.
+        if(user) await user.getIdToken();
+        if(current!==version) return;
+        setSession({user,loading:false,error:''});
+        setPage('dashboard');
+        setMobileOpen(false);
+      } catch(error) {
+        if(current===version) setSession({user:null,loading:false,error:authErrorMessage(error)});
+      }
+    },error=>{
+      version++;
+      setSession({user:null,loading:false,error:authErrorMessage(error)});
+    });
+    return ()=>{version++;unsubscribe();};
+  },[]);
+
+  async function handleLogout(){
+    if(loggingOut) return;
+    setLoggingOut(true);setLogoutError('');
+    try {await logoutUser();}
+    catch(error){setLogoutError(authErrorMessage(error));}
+    finally {setLoggingOut(false);}
+  }
+
+  if(session.loading) return <div className="auth-loading" role="status"><Leaf size={28}/><span>Restoring your session...</span></div>;
+  if(!session.user) return <Login role={role} setRole={setRole} sessionError={session.error}/>;
 
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen}/>
+    <Sidebar page={page} setPage={setPage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} loggingOut={loggingOut}/>
     <div className="main-shell">
-      <Topbar setMobileOpen={setMobileOpen} preferences={preferences}/>
+      <Topbar setMobileOpen={setMobileOpen} preferences={{...preferences,name:session.user.displayName||session.user.email||'Signed-in user'}}/>
       <main key={page} id="main-content" className="page-wrap">
+        {logoutError&&<p className="auth-error" role="alert">Could not sign out. {logoutError}</p>}
         {page==='dashboard' && <Dashboard setPage={setPage}/>} 
         {page==='pipeline' && <Pipeline setPage={setPage}/>} 
         {page==='loan' && <LoanFile setPage={setPage}/>} 
@@ -61,7 +103,7 @@ function App(){
   </div>
 }
 
-function Sidebar({page,setPage,mobileOpen,setMobileOpen}){
+function Sidebar({page,setPage,mobileOpen,setMobileOpen,onLogout,loggingOut}){
   return <>
     <aside className={`sidebar ${mobileOpen?'open':''}`} aria-label="Primary navigation">
       <div className="brand"><Leaf size={25}/><span>Agentic Lender</span></div>
@@ -73,7 +115,7 @@ function Sidebar({page,setPage,mobileOpen,setMobileOpen}){
         <button className={page==='settings'?'active':''} onClick={()=>{setPage('settings');setMobileOpen(false)}}><Settings size={19}/><span>Settings</span></button>
       </nav>
       <div className="sidebar-quote">“Clear lending.<br/>Stronger outcomes.”</div>
-      <button className="logout" onClick={()=>setPage('login')}><LogOut size={19}/>Logout</button>
+      <button className="logout" onClick={onLogout} disabled={loggingOut}><LogOut size={19}/>{loggingOut?'Signing out...':'Logout'}</button>
     </aside>
     {mobileOpen && <button className="backdrop" aria-label="Close menu" onClick={()=>setMobileOpen(false)}/>} 
   </>
@@ -83,23 +125,46 @@ function Topbar({setMobileOpen,preferences}){
   return <header className="topbar">
     <button className="icon-btn mobile-only" aria-label="Open menu" onClick={()=>setMobileOpen(true)}><Menu/></button>
     <div className="search"><Search size={18}/><input aria-label="Search" placeholder="Search loans, brokers, or documents..."/></div>
-    <div className="top-actions"><button className="icon-btn" aria-label="Notifications"><Bell/></button><div className="avatar" aria-hidden="true">{preferences.name.split(/\s+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('')}</div><div className="user-meta"><strong>{preferences.name}</strong><span>Underwriter</span></div></div>
+    <div className="top-actions"><button className="icon-btn" aria-label="Notifications"><Bell/></button><div className="avatar" aria-hidden="true">{preferences.name.split(/\s+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('')}</div><div className="user-meta"><strong>{preferences.name}</strong><span>Signed in</span></div></div>
   </header>
 }
 
-function Login({setPage,role,setRole}){
+function Login({role,setRole,sessionError}){
+  const [email,setEmail]=useState('');
+  const [password,setPassword]=useState('');
+  const [pending,setPending]=useState('');
+  const [error,setError]=useState('');
+  const [notice,setNotice]=useState('');
+  async function handleSubmit(event){
+    event.preventDefault();
+    if(pending||authConfigurationError) return;
+    setPending('signin');setError('');setNotice('');
+    try {await signIn(email,password);}
+    catch(error){setError(authErrorMessage(error));}
+    finally {setPassword('');setPending('');}
+  }
+  async function handleReset(event){
+    const input=event.currentTarget.form.elements.email;
+    if(!input.reportValidity()||pending||authConfigurationError) return;
+    setPending('reset');setError('');setNotice('');
+    try {await resetPassword(email);setNotice('If an account exists for this email, password reset instructions have been sent.');}
+    catch(error){setError(authErrorMessage(error));}
+    finally {setPending('');}
+  }
   return <div className="login-page">
-    <section className="login-card" aria-labelledby="login-title">
+    <form className="login-card" aria-labelledby="login-title" onSubmit={handleSubmit} aria-busy={!!pending}>
       <div className="login-brand"><Leaf/><span>Agentic Lender</span></div>
       <div className="eyebrow">Welcome back</div>
       <h1 id="login-title">Sign in to<br/><em>Agentic Lender</em></h1>
       <p>Intelligent lending. Cleaner decisions.</p>
-      <label>Email<input type="email" placeholder="you@company.com"/></label>
-      <label>Password<input type="password" placeholder="Enter your password"/></label>
-      <label>Select role<select value={role} onChange={e=>setRole(e.target.value)}><option>Underwriter</option><option>Mortgage Broker</option></select></label>
-      <button className="primary wide" onClick={()=>setPage('dashboard')}>Sign in <ArrowRight size={18}/></button>
-      <button className="text-link">Forgot password?</button>
-    </section>
+      <label>Email<input name="email" type="email" autoComplete="username" required placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)} disabled={!!pending}/></label>
+      <label>Password<input name="password" type="password" autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={e=>setPassword(e.target.value)} disabled={!!pending}/></label>
+      <label>Select role<select value={role} onChange={e=>setRole(e.target.value)} disabled={!!pending}><option>Underwriter</option><option>Mortgage Broker</option></select></label>
+      {(authConfigurationError||error||sessionError)&&<p className="auth-error" role="alert">{authConfigurationError||error||sessionError}</p>}
+      {notice&&<p className="auth-notice" role="status">{notice}</p>}
+      <button type="submit" className="primary wide" disabled={!!pending||!!authConfigurationError}>{pending==='signin'?'Signing in...':'Sign in'} <ArrowRight size={18}/></button>
+      <button type="button" className="text-link" onClick={handleReset} disabled={!!pending||!!authConfigurationError}>{pending==='reset'?'Sending reset instructions...':'Forgot password?'}</button>
+    </form>
     <aside className="login-art" aria-label="Brand statement">
       <div className="leaf-blob blob-a"/><div className="leaf-blob blob-b"/><div className="leaf-blob blob-c"/>
       <div className="login-art-copy"><span className="eyebrow">The future of lending</span><h2>Capital for a<br/><em>stronger tomorrow.</em></h2><p>Built for thoughtful underwriting, transparent decisions, and durable outcomes.</p></div>
@@ -434,3 +499,4 @@ function SettingsPage({preferences,onSave}){
 }
 
 createRoot(document.getElementById('root')).render(<App/>);
+
