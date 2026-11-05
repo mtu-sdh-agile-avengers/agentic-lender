@@ -1,6 +1,6 @@
 [project]
 name = "api"
-version = "0.1.0"
+version = "0.2.0"
 description = "AL-Core; REST api"
 authors = [
     {name = "Teki Shodo", email = "tekishodo@gmail.com"}
@@ -12,13 +12,19 @@ dependencies = [
     "firebase-admin>=7.7.0",
     "gunicorn>=26.2.0",
     "uvicorn>=0.54.0",
-    "httpx2>=2.13.1",
     "loguru>=0.7.3",
     "pytest>=9.1.1",
     "python-dotenv>=1.2.3",
     "slowapi>=0.1.10",
+    "ruff>=0.17.0",
+    "requests>=2.34.2",
 ]
 
+# fastapi configureation
+[tool.fastapi]
+entrypoint = "src.main:app" # allows `fastapi` command  where to find FastAPI instance (`app` object) without explicitly specifying path
+
+# pytest configuration
 [tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
+pythonpath = [".", "src"]   # required in order for imports to work (adds root  and .src folders to sys.path)
+testpaths = ["tests"]       # specifies tests directory location for pytest
