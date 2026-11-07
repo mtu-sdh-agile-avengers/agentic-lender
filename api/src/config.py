@@ -23,14 +23,22 @@ class RunMode(StrEnum):
 
 class Config(BaseSettings):
     run_mode: Literal[RunMode.PROD, RunMode.DEV]
-    
-    google_application_credentials: str
-    firestore_prod_database_name: str
+
+    # service account key (.json); required in prod, optional in dev (emulators need no real credentials)
+    google_application_credentials: str = ""
+    firestore_prod_database_name: str = ""
     firestore_emulator_host: str
     firebase_auth_emulator_host: str
-    
+    # project ID the emulator suite runs under (`firebase emulators:start --project demo-agentic-lender`);
+    # used in dev when no service account key is provided
+    firebase_project_id: str = "demo-agentic-lender"
+
     # if init. overriden by CORS_ORIGINS in .env for other ports
     cors_origins: list[str]
+
+    # AL-AI Engine (internal service); AL-Core sends `internal_api_key` as X-Internal-Key header
+    ai_engine_url: str = "http://localhost:8001"
+    internal_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
