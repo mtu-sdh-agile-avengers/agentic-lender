@@ -1,0 +1,11 @@
+# Keep the build context small and secrets out of the image
+.env
+.venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+*.log
+# service account keys must never be baked into an image
+*.json
+!src/firebase/firestore.indexes.json

@@ -1,0 +1,12 @@
+# Keep the build context small and secrets out of the image
+.env
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+ml/data
+ml/models
+ml/reports
+spikes
+tests
