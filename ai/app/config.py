@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # machine learning
     model_path: Path = SERVICE_ROOT / "ml" / "models" / "avm_v1.joblib"
 
+    # Fallback when no local model exists: fetch it from Hugging Face Hub,
+    # so AL-Core and CI do not need the dataset or a training run.
+    hf_repo_id: str = "mtu-sdh-agile-avengers/agentic_lender"
+    hf_model_filename: str = "avm_v1.joblib"
+    hf_revision: str = "main"
+    hf_token: str = ""  # only needed if the repo is private
+
     # LLM providers (names only; keys stay in their own variables)
     groq_api_key: str = ""
     gemini_api_key: str = ""
