@@ -19,10 +19,11 @@ export function resetPassword(email) {
     return sendPasswordResetEmail(requireAuth(), email.trim());
 }
 
-export async function getCurrentIdToken() {
+// forceRefresh=true fetches a new token, e.g. after AL-Core changed the user's role claim
+export async function getCurrentIdToken(forceRefresh = false) {
     const user = requireAuth().currentUser;
     if (!user) throw Object.assign(new Error('Sign-in required'), {code:'auth/no-current-user'});
-    return user.getIdToken();
+    return user.getIdToken(forceRefresh);
 }
 
 export async function signIn(email, password) {
