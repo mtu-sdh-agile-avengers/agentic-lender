@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug builds only: allow plain HTTP to any host, so the app can reach AL-Core
+    and the Firebase emulators on your computer's LAN IP from a physical phone.
+    Release builds use src/main/res/xml/network_security_config.xml instead.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
