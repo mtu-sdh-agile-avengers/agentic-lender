@@ -1,0 +1,7 @@
+# Local development: the service, plus tests and the ml/ training scripts.
+#   pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest==9.1.1
+matplotlib==3.11.2
+kaggle==2.2.4
