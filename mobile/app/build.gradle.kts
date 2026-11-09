@@ -3,15 +3,29 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// Where the app finds AL-Core and the Firebase emulators. Defaults suit the Android emulator
-// (10.0.2.2 = the host machine, where `docker compose up` runs). For a physical phone, set your
-// computer's LAN IP in ~/.gradle/gradle.properties, e.g.:
+// Where the app finds AL-Core and Firebase. Defaults suit the Android emulator (10.0.2.2 = the host
+// machine, where `docker compose up` runs) and the Firebase emulator suite. Override in
+// ~/.gradle/gradle.properties (never commit keys), e.g. for a physical phone:
 //   al.apiBaseUrl=http://192.168.1.20:8000
 //   al.emulatorHost=192.168.1.20
+// and for the real Firebase project (AL-Core must run with FIREBASE_MODE=cloud too):
+//   al.firebaseMode=cloud
+//   al.firebaseApiKey=AIza...            (google-services.json: current_key)
+//   al.firebaseAppId=1:...:android:...   (google-services.json: mobilesdk_app_id)
 val alApiBaseUrl = providers.gradleProperty("al.apiBaseUrl").getOrElse("http://10.0.2.2:8000")
 val alEmulatorHost = providers.gradleProperty("al.emulatorHost").getOrElse("10.0.2.2")
 val alAuthEmulatorPort = providers.gradleProperty("al.authEmulatorPort").getOrElse("9099")
-val alFirebaseProjectId = providers.gradleProperty("al.firebaseProjectId").getOrElse("demo-agentic-lender")
+val alUseFirebaseEmulator = providers.gradleProperty("al.firebaseMode").getOrElse("emulator") != "cloud"
+val alFirebaseProjectId = providers.gradleProperty("al.firebaseProjectId")
+    .getOrElse(if (alUseFirebaseEmulator) "demo-agentic-lender" else "agentic-lender")
+val alFirebaseApiKey = providers.gradleProperty("al.firebaseApiKey").getOrElse("")
+val alFirebaseAppId = providers.gradleProperty("al.firebaseAppId").getOrElse("")
+if (!alUseFirebaseEmulator && (alFirebaseApiKey.isBlank() || alFirebaseAppId.isBlank())) {
+    throw GradleException(
+        "al.firebaseMode=cloud needs al.firebaseApiKey and al.firebaseAppId in ~/.gradle/gradle.properties " +
+            "(see docs/run-guide.md, 'Real Firebase')."
+    )
+}
 
 android {
     namespace = "com.example.alaimobileapp"
@@ -32,6 +46,9 @@ android {
         buildConfigField("String", "AL_EMULATOR_HOST", "\"$alEmulatorHost\"")
         buildConfigField("int", "AL_AUTH_EMULATOR_PORT", alAuthEmulatorPort)
         buildConfigField("String", "AL_FIREBASE_PROJECT_ID", "\"$alFirebaseProjectId\"")
+        buildConfigField("boolean", "AL_USE_FIREBASE_EMULATOR", alUseFirebaseEmulator.toString())
+        buildConfigField("String", "AL_FIREBASE_API_KEY", "\"$alFirebaseApiKey\"")
+        buildConfigField("String", "AL_FIREBASE_APP_ID", "\"$alFirebaseAppId\"")
     }
 
     buildTypes {

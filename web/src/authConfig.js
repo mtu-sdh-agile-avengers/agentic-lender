@@ -1,9 +1,15 @@
+// VITE_FIREBASE_MODE ('emulator' | 'cloud') comes from Docker Compose (root .env FIREBASE_MODE).
+// Without it, VITE_USE_EMULATORS=true|false decides, as before (.env.local for `npm run dev`).
 export function readAuthConfig(env) {
-  const useEmulators = env.VITE_USE_EMULATORS === 'true';
+  const mode = env.VITE_FIREBASE_MODE?.trim();
+  const useEmulators = mode ? mode !== 'cloud' : env.VITE_USE_EMULATORS === 'true';
   if (useEmulators && !env.DEV) {
     throw new Error('Emulator authentication is disabled in production. Set VITE_USE_EMULATORS=false and configure the Firebase web app.');
   }
-  const projectId = env.VITE_FIREBASE_PROJECT_ID?.trim();
+  // Emulators use a "demo-" project, the real Firebase project has its own ID
+  const projectId = (useEmulators
+    ? env.VITE_FIREBASE_EMULATOR_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID
+    : env.VITE_FIREBASE_PROJECT_ID)?.trim();
   if (!projectId || projectId.startsWith('YOUR_')) {
     throw new Error('Firebase setup is incomplete. Configure VITE_FIREBASE_PROJECT_ID and restart the app.');
   }
@@ -22,9 +28,10 @@ export function readAuthConfig(env) {
     appId: env.VITE_FIREBASE_APP_ID?.trim(),
   };
   if (useEmulators) {
-    config.apiKey ||= 'emulator-only-key';
-    config.authDomain ||= `${projectId}.firebaseapp.com`;
-    config.appId ||= 'emulator-only-app';
+    // placeholders only: the real project's keys are never needed (or sent) in emulator mode
+    config.apiKey = 'emulator-only-key';
+    config.authDomain = `${projectId}.firebaseapp.com`;
+    config.appId = 'emulator-only-app';
   } else if (projectId.startsWith('demo-') || Object.values(config).some(value => !value || value.startsWith('YOUR_'))) {
     throw new Error('Firebase cloud setup is incomplete. Configure the web app API key, auth domain, project ID, and app ID.');
   }

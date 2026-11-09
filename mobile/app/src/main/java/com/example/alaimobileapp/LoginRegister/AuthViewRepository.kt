@@ -1,5 +1,6 @@
 package com.example.alaimobileapp.LoginRegister
 
+import com.example.alaimobileapp.BuildConfig
 import com.example.alaimobileapp.Data.AlCoreApi
 import com.example.alaimobileapp.Data.AlCoreException
 import com.example.alaimobileapp.Data.AppUser
@@ -109,7 +110,9 @@ class AuthViewRepository(
         is FirebaseAuthInvalidUserException -> "Incorrect email or password."
         is FirebaseAuthUserCollisionException -> "An account with this email already exists."
         is FirebaseTooManyRequestsException -> "Too many attempts. Please wait and try again."
-        is FirebaseNetworkException -> "Can't reach the sign-in server. Is the Firebase emulator running?"
+        is FirebaseNetworkException ->
+            if (BuildConfig.AL_USE_FIREBASE_EMULATOR) "Can't reach the sign-in server. Is the Firebase emulator running?"
+            else "Can't reach the sign-in server. Check your internet connection."
         else -> GENERIC_ERROR
     }
 
