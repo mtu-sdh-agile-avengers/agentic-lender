@@ -21,10 +21,19 @@ class RunMode(StrEnum):
     DEV = "dev"
 
 
+class FirebaseMode(StrEnum):
+    EMULATOR = "emulator"   # local Firebase emulator suite, no real credentials
+    CLOUD = "cloud"         # real Firebase project, service account key required
+
+
 class Config(BaseSettings):
     run_mode: Literal[RunMode.PROD, RunMode.DEV]
 
-    # service account key (.json); required in prod, optional in dev (emulators need no real credentials)
+    # Which Firebase AL-Core talks to. Not set: follows run_mode (dev -> emulator, prod -> cloud).
+    # Set FIREBASE_MODE=cloud to use the real project while keeping dev behaviour (no rate limiting, debug logs).
+    firebase_mode: FirebaseMode | None = None
+
+    # service account key (.json); required for the real Firebase project, optional for the emulators
     google_application_credentials: str = ""
     firestore_prod_database_name: str = ""
     firestore_emulator_host: str
@@ -40,14 +49,21 @@ class Config(BaseSettings):
     ai_engine_url: str = "http://localhost:8001"
     internal_api_key: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # env_ignore_empty: `FIREBASE_MODE=` (empty) in .env means "not set", not an invalid value
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", env_ignore_empty=True)
+
+    @property
+    def use_emulators(self) -> bool:
+        if self.firebase_mode is not None:
+            return self.firebase_mode == FirebaseMode.EMULATOR
+        return self.run_mode == RunMode.DEV
 
     # required, since prod database has differenet name (is not default one)
     @property
     def firestore_database_name(self) -> str:
         return (
             _DEFAULT_DATABASE
-            if self.run_mode == RunMode.DEV
+            if self.use_emulators
             else self.firestore_prod_database_name
         )
 

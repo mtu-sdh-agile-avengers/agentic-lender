@@ -9,7 +9,7 @@ from firebase_admin import credentials, firestore_async
 from google.auth.credentials import AnonymousCredentials
 from google.cloud.firestore import AsyncClient
 from loguru import logger
-from src.config import RunMode, get_config
+from src.config import get_config
 
 _FIRESTORE_EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
 _FIREBASE_AUTH_EMULATOR_ENV = "FIREBASE_AUTH_EMULATOR_HOST"
@@ -30,8 +30,28 @@ def _load_certificate(path: str) -> credentials.Certificate:
     try:
         return credentials.Certificate(path)
     except FileNotFoundError:
-        logger.error("Service account key .json file not found")
+        logger.error(f"Service account key .json file not found: {path}")
         raise
+
+
+def _require_cloud_settings() -> None:
+    """Fails fast with a readable message instead of a Firebase stack trace."""
+    config = get_config()
+    missing = [
+        name
+        for name, value in (
+            ("GOOGLE_APPLICATION_CREDENTIALS", config.google_application_credentials),
+            ("FIRESTORE_PROD_DATABASE_NAME", config.firestore_prod_database_name),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs: {', '.join(missing)}")
+    if not os.path.isfile(config.google_application_credentials):
+        raise FileNotFoundError(
+            f"Service account key not found at {config.google_application_credentials}. "
+            "Download it from Firebase Console -> Project settings -> Service accounts."
+        )
 
 
 def init_firebase() -> None:
@@ -49,7 +69,7 @@ def init_firebase() -> None:
         config = get_config()
 
         # "demo" prefix allows app and code to interact with emulators only (all is local)
-        if config.run_mode == RunMode.DEV:
+        if config.use_emulators:
             os.environ[_FIRESTORE_EMULATOR_ENV] = (
                 config.firestore_emulator_host
             )  # allows automatically connect to Cloud Firestore emulator
@@ -58,7 +78,8 @@ def init_firebase() -> None:
             )  # allows automatically connect to Firebase Auth emulator
 
             # emulator suit starts with "--project demo-agentic-lender" CLA, therefore app should have the same project_id to connect
-            if config.google_application_credentials:
+            # (a key is optional here: Docker Compose always sets the path, the file exists only if someone added it)
+            if config.google_application_credentials and os.path.isfile(config.google_application_credentials):
                 cred = _load_certificate(config.google_application_credentials)
                 project_id = f"demo-{cred.project_id}"
             else:
@@ -66,13 +87,17 @@ def init_firebase() -> None:
                 project_id = config.firebase_project_id
             options = {"projectId": project_id}
         else:
+            _require_cloud_settings()
             cred = _load_certificate(config.google_application_credentials)
             os.environ.pop(_FIRESTORE_EMULATOR_ENV, None)
             os.environ.pop(_FIREBASE_AUTH_EMULATOR_ENV, None)
             options = None # explicit projectId is not required, since credentials are used (service account key)
 
         firebase_admin.initialize_app(cred, options)
-        logger.success("Firebase initialized successfully")
+        logger.success(
+            f"Firebase initialized successfully ({'emulators' if config.use_emulators else 'real project'}: "
+            f"{firebase_admin.get_app().project_id})"
+        )
 
 
 # "`db_id`" parameter may be required in the future, when there is possibly will be more than one Cloud Firestore database.

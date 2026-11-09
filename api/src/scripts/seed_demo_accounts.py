@@ -1,15 +1,17 @@
-"""Seeds the shared demo accounts (one per role) into the Firebase emulator suite.
+"""Seeds the shared demo accounts (one per role).
 
 Idempotent: safe to run on every `docker compose up`. Existing accounts are left as they are,
 except that the role claim and the Firestore profile are (re)created if missing.
 
 Usage:
-    python -m src.scripts.seed_demo_accounts          # from api/, RUN_MODE=dev
-    docker compose run --rm seed                      # what Docker Compose does
+    python -m src.scripts.seed_demo_accounts           # emulators (what Docker Compose runs on every start)
+    python -m src.scripts.seed_demo_accounts --cloud   # the REAL Firebase project, run by hand once
+    docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud
 
-NOTE: refuses to run in prod, these passwords are public.
+NOTE: these passwords are public (they are in this repo). In the real project they are demo accounts only.
 """
 
+import argparse
 import asyncio
 from dataclasses import dataclass
 
@@ -17,7 +19,7 @@ from firebase_admin import auth
 
 from src.auth.enums import Role
 from src.auth.gateway import FirebaseAuthGateway
-from src.config import RunMode, get_config
+from src.config import get_config
 from src.firebase.connection import get_firestore, init_firebase
 from src.users.models import UserProfileModel
 from src.users.repository import UserProfileFirestoreRepository
@@ -48,7 +50,7 @@ def _get_or_create_user(account: DemoAccount) -> tuple[auth.UserRecord, bool]:
             email=account.email,
             password=DEMO_PASSWORD,
             display_name=account.full_name,
-            phone_number=account.phone,
+            # the demo phone numbers live only in the Firestore profile, never on a real Auth account
             email_verified=True,
         )
         return user, True
@@ -79,11 +81,18 @@ async def seed() -> None:
 
 
 def main() -> None:
-    if get_config().run_mode != RunMode.DEV:
-        raise SystemExit("seed_demo_accounts only runs against the emulators (RUN_MODE=dev)")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--cloud", action="store_true", help="really seed the real Firebase project")
+    args = parser.parse_args()
+
+    if not get_config().use_emulators and not args.cloud:
+        # Docker Compose runs this on every start; never touch the real project implicitly
+        print("Real Firebase is configured: skipping demo accounts. Run with --cloud to create them there.")
+        return
 
     init_firebase()
-    print("Seeding demo accounts (Firebase Auth emulator + Firestore emulator):")
+    target = "Firebase emulators" if get_config().use_emulators else "REAL Firebase project"
+    print(f"Seeding demo accounts ({target}):")
     asyncio.run(seed())
 
 
