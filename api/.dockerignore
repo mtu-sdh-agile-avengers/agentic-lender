@@ -6,6 +6,7 @@
 .pytest_cache
 .ruff_cache
 *.log
-# service account keys must never be baked into an image
-*.json
+# service account keys must never be baked into an image (compose mounts api/secrets instead)
+secrets
+**/*.json
 !src/firebase/firestore.indexes.json

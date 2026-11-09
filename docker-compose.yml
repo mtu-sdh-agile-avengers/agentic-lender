@@ -16,9 +16,14 @@
 #
 # Values come from a root .env file (copy .env.example). Every variable has a
 # working default, so `docker compose up` also works without one.
+#
+# Firebase: FIREBASE_MODE=emulator (default, local emulators, no credentials)
+# or FIREBASE_MODE=cloud (the real project; needs api/secrets/service-account.json
+# and the web app config in .env). See docs/run-guide.md, "Real Firebase".
 
 name: agentic-lender
 
+x-firebase-mode: &firebase-mode ${FIREBASE_MODE:-emulator}
 x-firebase-project: &firebase-project ${FIREBASE_PROJECT_ID:-demo-agentic-lender}
 x-internal-key: &internal-key ${INTERNAL_API_KEY:-al-dev-internal-key}
 
@@ -45,18 +50,27 @@ services:
 
   # One-shot: creates the demo accounts (borrower, broker, bank officer), then exits.
   # Emulator data is in memory, so this runs on every `up`. Idempotent.
+  # With FIREBASE_MODE=cloud it does nothing; seed the real project by hand:
+  #   docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud
   seed:
     build: ./api
     image: agentic-lender/api:dev
     command: ["python", "-m", "src.scripts.seed_demo_accounts"]
     environment: &api-env
       RUN_MODE: dev
+      FIREBASE_MODE: *firebase-mode
+      # emulator mode
       FIREBASE_PROJECT_ID: *firebase-project
       FIRESTORE_EMULATOR_HOST: firebase:8080
       FIREBASE_AUTH_EMULATOR_HOST: firebase:9099
+      # cloud mode: the key file is mounted from api/secrets/ (gitignored), never baked into the image
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+      FIRESTORE_PROD_DATABASE_NAME: ${FIRESTORE_PROD_DATABASE_NAME:-default}
       CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000","http://127.0.0.1:3000"]'
       AI_ENGINE_URL: http://ai:8001
       INTERNAL_API_KEY: *internal-key
+    volumes: &firebase-secrets
+      - ./api/secrets:/run/secrets/firebase:ro
     depends_on:
       firebase:
         condition: service_healthy
@@ -67,6 +81,7 @@ services:
     build: ./api
     image: agentic-lender/api:dev
     environment: *api-env
+    volumes: *firebase-secrets
     ports:
       - "8000:8000"
     depends_on:
@@ -109,9 +124,14 @@ services:
     command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort"]
     environment:
       # the browser runs on the host, so these are host URLs, not container names
-      VITE_USE_EMULATORS: "true"
-      VITE_FIREBASE_PROJECT_ID: *firebase-project
+      VITE_FIREBASE_MODE: *firebase-mode
+      VITE_FIREBASE_EMULATOR_PROJECT_ID: *firebase-project
       VITE_AUTH_EMULATOR_URL: http://127.0.0.1:9099
+      # cloud mode: the Firebase web app config (values in the root .env, not in git)
+      VITE_FIREBASE_PROJECT_ID: ${FIREBASE_CLOUD_PROJECT_ID:-agentic-lender}
+      VITE_FIREBASE_AUTH_DOMAIN: ${FIREBASE_WEB_AUTH_DOMAIN:-agentic-lender.firebaseapp.com}
+      VITE_FIREBASE_API_KEY: ${FIREBASE_WEB_API_KEY:-}
+      VITE_FIREBASE_APP_ID: ${FIREBASE_WEB_APP_ID:-}
       VITE_API_BASE_URL: http://localhost:8000
       CHOKIDAR_USEPOLLING: "true"   # file watching through a Windows/macOS bind mount
     volumes:
