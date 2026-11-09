@@ -99,6 +99,44 @@ docker compose up firebase seed api ai  # then `npm run dev` in web/
 Each service's own `.env.example` (`api/`, `ai/`, `web/`) has the values for a
 native run; they point at `localhost`, which reaches the containers' ports.
 
+## 8. Real Firebase (cloud mode)
+
+By default everything runs on the emulators. To use the real Firebase project
+`agentic-lender` instead (real accounts, data that survives restarts):
+
+**One-time setup in Firebase Console** (whoever owns the project)
+
+- Authentication → Sign-in method → enable **Email/Password**
+- Firestore: the database ID must match `FIRESTORE_PROD_DATABASE_NAME` (default `default`)
+- Project settings → Service accounts → **Generate new private key**
+- Project settings → Your apps → Android app `com.example.alaimobileapp` (for mobile)
+
+**On your machine** (get the values privately from Pavlo/Hlib, never commit them)
+
+1. Save the key as `api/secrets/service-account.json` (gitignored).
+2. In the root `.env`:
+   ```properties
+   FIREBASE_MODE=cloud
+   FIREBASE_WEB_API_KEY=AIza...
+   FIREBASE_WEB_APP_ID=1:158281929652:web:...
+   ```
+3. `docker compose up --build`. AL-Core logs `Firebase initialized successfully (real project: agentic-lender)`.
+4. Demo accounts are not created automatically in the real project. Once, by hand:
+   ```bash
+   docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud
+   ```
+5. Mobile: in `~/.gradle/gradle.properties` (values from the Android app's `google-services.json`):
+   ```properties
+   al.firebaseMode=cloud
+   al.firebaseApiKey=AIza...            # current_key
+   al.firebaseAppId=1:...:android:...   # mobilesdk_app_id
+   ```
+   Then Sync and Run. Remove `al.firebaseMode` to go back to the emulator.
+
+Back to the emulators: `FIREBASE_MODE=emulator` (or delete the line) and restart.
+All three parts must use the same mode: a token from the real project is rejected
+by AL-Core in emulator mode, and the other way round.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -110,3 +148,6 @@ native run; they point at `localhost`, which reaches the containers' ports.
 | Mobile: "Can't reach the server" | Use an emulator (not a phone) or set `al.apiBaseUrl`; check `docker compose ps`. |
 | Mobile: "This app is for borrowers" | Expected for broker/officer accounts: they use the web app. |
 | Emulator data is gone after restart | By design. `seed` recreates the demo accounts on every `up`. |
+| Cloud mode: AL-Core exits with `Service account key not found` | Put the key at `api/secrets/service-account.json`. |
+| Cloud mode, web: "Email and password sign-in is not enabled" | Enable Email/Password in Firebase Console → Authentication. |
+| Cloud mode: `/users/me` answers 404 for a demo account | Run the `--cloud` seed command above. |
