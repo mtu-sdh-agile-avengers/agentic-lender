@@ -2,6 +2,7 @@
 NOTE: "`app`" parameter is not utilized, since only one, i.e. default, Firebase app being used by AL-Core.
 """
 
+import json
 import os
 
 import firebase_admin
@@ -34,24 +35,32 @@ def _load_certificate(path: str) -> credentials.Certificate:
         raise
 
 
-def _require_cloud_settings() -> None:
-    """Fails fast with a readable message instead of a Firebase stack trace."""
+def _cloud_credential() -> credentials.Certificate:
+    """Service account for the real project. Fails fast with a readable message instead of a Firebase stack trace.
+
+    FIREBASE_SERVICE_ACCOUNT_JSON (the key itself) wins over GOOGLE_APPLICATION_CREDENTIALS (a path to it).
+    """
     config = get_config()
-    missing = [
-        name
-        for name, value in (
-            ("GOOGLE_APPLICATION_CREDENTIALS", config.google_application_credentials),
-            ("FIRESTORE_PROD_DATABASE_NAME", config.firestore_prod_database_name),
+    if not config.firestore_prod_database_name:
+        raise RuntimeError("Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs FIRESTORE_PROD_DATABASE_NAME")
+
+    if config.firebase_service_account_json:
+        try:
+            return credentials.Certificate(json.loads(config.firebase_service_account_json))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON") from exc
+
+    if not config.google_application_credentials:
+        raise RuntimeError(
+            "Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs a service account key: "
+            "FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS"
         )
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(f"Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs: {', '.join(missing)}")
     if not os.path.isfile(config.google_application_credentials):
         raise FileNotFoundError(
             f"Service account key not found at {config.google_application_credentials}. "
             "Download it from Firebase Console -> Project settings -> Service accounts."
         )
+    return _load_certificate(config.google_application_credentials)
 
 
 def init_firebase() -> None:
@@ -87,8 +96,7 @@ def init_firebase() -> None:
                 project_id = config.firebase_project_id
             options = {"projectId": project_id}
         else:
-            _require_cloud_settings()
-            cred = _load_certificate(config.google_application_credentials)
+            cred = _cloud_credential()
             os.environ.pop(_FIRESTORE_EMULATOR_ENV, None)
             os.environ.pop(_FIREBASE_AUTH_EMULATOR_ENV, None)
             options = None # explicit projectId is not required, since credentials are used (service account key)

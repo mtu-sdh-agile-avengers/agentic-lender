@@ -23,3 +23,9 @@ def test_firebase_mode_decides_emulators(run_mode, firebase_mode, emulators, dat
     config = Config(**BASE, run_mode=run_mode, firebase_mode=firebase_mode, _env_file=None)
     assert config.use_emulators is emulators
     assert config.firestore_database_name == database
+
+
+def test_emulator_hosts_have_local_defaults():
+    config = Config(run_mode=RunMode.PROD, cors_origins=[], _env_file=None)
+    assert config.firestore_emulator_host == "127.0.0.1:8080"
+    assert config.firebase_auth_emulator_host == "127.0.0.1:9099"

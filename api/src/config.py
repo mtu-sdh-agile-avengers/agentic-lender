@@ -33,11 +33,14 @@ class Config(BaseSettings):
     # Set FIREBASE_MODE=cloud to use the real project while keeping dev behaviour (no rate limiting, debug logs).
     firebase_mode: FirebaseMode | None = None
 
-    # service account key (.json); required for the real Firebase project, optional for the emulators
+    # service account key for the real Firebase project, either as a file (.json path) or as the JSON itself
+    # (hosts that keep secrets in environment variables: Azure Container Apps, GitHub Actions).
+    # Optional for the emulators.
     google_application_credentials: str = ""
+    firebase_service_account_json: str = ""
     firestore_prod_database_name: str = ""
-    firestore_emulator_host: str
-    firebase_auth_emulator_host: str
+    firestore_emulator_host: str = "127.0.0.1:8080"
+    firebase_auth_emulator_host: str = "127.0.0.1:9099"
     # project ID the emulator suite runs under (`firebase emulators:start --project demo-agentic-lender`);
     # used in dev when no service account key is provided
     firebase_project_id: str = "demo-agentic-lender"
