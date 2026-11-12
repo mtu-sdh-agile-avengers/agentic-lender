@@ -84,15 +84,23 @@ grant() {  # principalId role scope (skips if already granted)
 step "Identity for GitHub Actions ($DEPLOY_IDENTITY): Contributor on $RG only"
 DEPLOY_PRINCIPAL=$(identity "$DEPLOY_IDENTITY")
 grant "$DEPLOY_PRINCIPAL" Contributor "$RG_ID"
-CREDENTIAL="github-$GITHUB_ENVIRONMENT"
-if ! az identity federated-credential show --name "$CREDENTIAL" --identity-name "$DEPLOY_IDENTITY" \
-     --resource-group "$RG" -o none 2>/dev/null; then
-  # Only workflow jobs running in this repo's "$GITHUB_ENVIRONMENT" environment can log in
-  az identity federated-credential create --name "$CREDENTIAL" --identity-name "$DEPLOY_IDENTITY" \
-    --resource-group "$RG" --issuer https://token.actions.githubusercontent.com \
-    --subject "repo:$GITHUB_REPO:environment:$GITHUB_ENVIRONMENT" \
-    --audiences api://AzureADTokenExchange -o none
-fi
+federated() {  # credential-name subject: only jobs in this repo's environment can log in
+  if ! az identity federated-credential show --name "$1" --identity-name "$DEPLOY_IDENTITY" \
+       --resource-group "$RG" -o none 2>/dev/null; then
+    az identity federated-credential create --name "$1" --identity-name "$DEPLOY_IDENTITY" \
+      --resource-group "$RG" --issuer https://token.actions.githubusercontent.com \
+      --subject "$2" --audiences api://AzureADTokenExchange -o none
+  fi
+}
+# GitHub sends one of two subject formats, depending on the organisation's OIDC settings:
+#   repo:<owner>/<repo>:environment:<env>
+#   repo:<owner>@<owner id>/<repo>@<repo id>:environment:<env>   (immutable IDs; ours uses this)
+federated "github-$GITHUB_ENVIRONMENT" "repo:$GITHUB_REPO:environment:$GITHUB_ENVIRONMENT"
+IDS=$(curl -fsS "https://api.github.com/repos/$GITHUB_REPO" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['owner']['login'], d['owner']['id'], d['name'], d['id'])")
+read -r OWNER OWNER_ID REPO_NAME REPO_ID <<<"$IDS"
+federated "github-$GITHUB_ENVIRONMENT-ids" \
+  "repo:$OWNER@$OWNER_ID/$REPO_NAME@$REPO_ID:environment:$GITHUB_ENVIRONMENT"
 
 step "Identity for pulling images ($PULL_IDENTITY): AcrPull only"
 PULL_PRINCIPAL=$(identity "$PULL_IDENTITY")
