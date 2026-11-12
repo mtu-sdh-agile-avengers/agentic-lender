@@ -1,0 +1,188 @@
+# Deploys Agentic Lender to Azure (Azure for Students) and publishes the Android APK.
+# Never runs on its own: start it from Actions -> "Deploy (Azure)" -> Run workflow (pick the branch),
+# or push a tag that starts with "deploy-" (git tag deploy-2026-11-20 && git push origin deploy-2026-11-20).
+#
+#   backend  images -> Azure Container Registry -> Container Apps (al-ai internal, al-core public)
+#   web      Vite build pointed at AL-Core and real Firebase, served by nginx -> Container App al-web
+#   mobile   APK pointed at AL-Core and real Firebase -> GitHub Release (pre-release)
+#
+# One-time setup: infra/azure/setup.sh, then the values it prints go into the "production"
+# environment in GitHub. Details: docs/deploy.md
+
+name: Deploy (Azure)
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: AL-Core + AI engine (Container Apps)
+        type: boolean
+        default: true
+      web:
+        description: AL-Web (Container Apps)
+        type: boolean
+        default: true
+      mobile:
+        description: AL-Mobile APK (GitHub Release)
+        type: boolean
+        default: true
+  push:
+    tags: ["deploy-*"]
+
+# Deploys queue up instead of overlapping
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+  ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+  ACA_ENV: ${{ vars.AZURE_CONTAINERAPPS_ENV }}
+  PULL_IDENTITY: ${{ vars.AZURE_PULL_IDENTITY }}
+  API_APP: al-core
+  AI_APP: al-ai
+  WEB_APP: al-web
+
+jobs:
+  backend:
+    name: Backend → Container Apps
+    if: github.event_name == 'push' || inputs.backend
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # Azure login with OIDC
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Log in to the container registry
+        run: az acr login --name "$ACR_NAME"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push AI engine image
+        uses: docker/build-push-action@v6
+        with:
+          context: ai
+          push: true
+          tags: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-ai:${{ github.sha }}
+          cache-from: type=gha,scope=ai
+          cache-to: type=gha,scope=ai,mode=max
+      - name: Build and push AL-Core image
+        uses: docker/build-push-action@v6
+        with:
+          context: api
+          push: true
+          tags: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-core:${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Deploy container apps
+        run: bash infra/azure/deploy-backend.sh
+        env:
+          API_IMAGE: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-core:${{ github.sha }}
+          AI_IMAGE: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-ai:${{ github.sha }}
+          FIRESTORE_DATABASE: ${{ vars.FIRESTORE_DATABASE || 'default' }}
+          INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+  web:
+    name: Web → Container Apps
+    needs: backend
+    # also runs when the backend step was skipped (deploying only the web app)
+    if: ${{ !cancelled() && needs.backend.result != 'failure' && (github.event_name == 'push' || inputs.web) }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: AL-Core address (al-core.<environment domain>)
+        run: |
+          domain=$(az containerapp env show --name "$ACA_ENV" --resource-group "$RG" \
+            --query properties.defaultDomain -o tsv)
+          echo "API_URL=https://$API_APP.$domain" >> "$GITHUB_ENV"
+      - name: Log in to the container registry
+        run: az acr login --name "$ACR_NAME"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push AL-Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-web:${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+          # public by design (they end up in the JavaScript bundle), so build args are fine
+          build-args: |
+            VITE_FIREBASE_MODE=cloud
+            VITE_FIREBASE_PROJECT_ID=${{ vars.FIREBASE_PROJECT_ID || 'agentic-lender' }}
+            VITE_FIREBASE_AUTH_DOMAIN=${{ vars.FIREBASE_AUTH_DOMAIN || 'agentic-lender.firebaseapp.com' }}
+            VITE_FIREBASE_API_KEY=${{ vars.FIREBASE_WEB_API_KEY }}
+            VITE_FIREBASE_APP_ID=${{ vars.FIREBASE_WEB_APP_ID }}
+            VITE_API_BASE_URL=${{ env.API_URL }}
+      - name: Deploy container app
+        run: bash infra/azure/deploy-web.sh
+        env:
+          WEB_IMAGE: ${{ vars.AZURE_ACR_NAME }}.azurecr.io/al-web:${{ github.sha }}
+
+  mobile:
+    name: Mobile → GitHub Release
+    needs: backend
+    if: ${{ !cancelled() && needs.backend.result != 'failure' && (github.event_name == 'push' || inputs.mobile) }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write # create the release
+      id-token: write
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Look up AL-Core URL
+        run: |
+          api=$(az containerapp show --name "$API_APP" --resource-group "$RG" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "API_URL=https://$api" >> "$GITHUB_ENV"
+      - name: Firebase config for the Android app
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build APK (real Firebase + deployed AL-Core)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug -Pal.firebaseMode=cloud -Pal.apiBaseUrl="$API_URL" --stacktrace
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="mobile-${{ github.run_number }}"
+          cp app/build/outputs/apk/debug/app-debug.apk "agentic-lender-$tag.apk"
+          gh release create "$tag" "agentic-lender-$tag.apk" \
+            --repo "${{ github.repository }}" --target "${{ github.sha }}" --prerelease \
+            --title "AL-Mobile demo build ${{ github.run_number }}" \
+            --notes "Debug build for testing. Backend: $API_URL (real Firebase project). Built from ${{ github.ref_name }} @ ${{ github.sha }}. Uninstall an older demo build first if Android refuses to update it."
