@@ -10,8 +10,8 @@ plugins {
 //   al.emulatorHost=192.168.1.20
 // and for the real Firebase project (AL-Core must run with FIREBASE_MODE=cloud too):
 //   al.firebaseMode=cloud
-//   al.firebaseApiKey=AIza...            (google-services.json: current_key)
-//   al.firebaseAppId=1:...:android:...   (google-services.json: mobilesdk_app_id)
+// plus app/google-services.json (Firebase Console -> Project settings -> Your apps -> Android;
+// gitignored, share it privately). Without that file, give al.firebaseApiKey + al.firebaseAppId instead.
 val alApiBaseUrl = providers.gradleProperty("al.apiBaseUrl").getOrElse("http://10.0.2.2:8000")
 val alEmulatorHost = providers.gradleProperty("al.emulatorHost").getOrElse("10.0.2.2")
 val alAuthEmulatorPort = providers.gradleProperty("al.authEmulatorPort").getOrElse("9099")
@@ -20,10 +20,17 @@ val alFirebaseProjectId = providers.gradleProperty("al.firebaseProjectId")
     .getOrElse(if (alUseFirebaseEmulator) "demo-agentic-lender" else "agentic-lender")
 val alFirebaseApiKey = providers.gradleProperty("al.firebaseApiKey").getOrElse("")
 val alFirebaseAppId = providers.gradleProperty("al.firebaseAppId").getOrElse("")
-if (!alUseFirebaseEmulator && (alFirebaseApiKey.isBlank() || alFirebaseAppId.isBlank())) {
+
+// google-services.json is optional: teammates without it still build (emulator mode).
+// When present, the Google services plugin turns it into resources that cloud mode reads.
+val hasGoogleServicesJson = layout.projectDirectory.file("google-services.json").asFile.exists()
+if (hasGoogleServicesJson) {
+    apply(plugin = "com.google.gms.google-services")
+}
+if (!alUseFirebaseEmulator && !hasGoogleServicesJson && (alFirebaseApiKey.isBlank() || alFirebaseAppId.isBlank())) {
     throw GradleException(
-        "al.firebaseMode=cloud needs al.firebaseApiKey and al.firebaseAppId in ~/.gradle/gradle.properties " +
-            "(see docs/run-guide.md, 'Real Firebase')."
+        "al.firebaseMode=cloud needs mobile/app/google-services.json, or al.firebaseApiKey and al.firebaseAppId " +
+            "in ~/.gradle/gradle.properties (see docs/run-guide.md, 'Real Firebase')."
     )
 }
 
@@ -34,7 +41,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.alaimobileapp"
+        // must match the Android app registered in Firebase (google-services.json)
+        applicationId = "io.github.mtu_sdh_agile_avengers.agenticlender.client"
         minSdk = 35
         targetSdk = 37
         versionCode = 1
@@ -92,4 +100,5 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
 }

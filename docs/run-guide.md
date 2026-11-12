@@ -109,7 +109,7 @@ By default everything runs on the emulators. To use the real Firebase project
 - Authentication → Sign-in method → enable **Email/Password**
 - Firestore: the database ID must match `FIRESTORE_PROD_DATABASE_NAME` (default `default`)
 - Project settings → Service accounts → **Generate new private key**
-- Project settings → Your apps → Android app `com.example.alaimobileapp` (for mobile)
+- Project settings → Your apps → Android app `io.github.mtu_sdh_agile_avengers.agenticlender.client` (for mobile)
 
 **On your machine** (get the values privately from Pavlo/Hlib, never commit them)
 
@@ -125,13 +125,13 @@ By default everything runs on the emulators. To use the real Firebase project
    ```bash
    docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud
    ```
-5. Mobile: in `~/.gradle/gradle.properties` (values from the Android app's `google-services.json`):
+5. Mobile: put the Android app's `google-services.json` in `mobile/app/` (gitignored, share it
+   privately; the app is registered as `io.github.mtu_sdh_agile_avengers.agenticlender.client`) and
+   add to `~/.gradle/gradle.properties`:
    ```properties
    al.firebaseMode=cloud
-   al.firebaseApiKey=AIza...            # current_key
-   al.firebaseAppId=1:...:android:...   # mobilesdk_app_id
    ```
-   Then Sync and Run. Remove `al.firebaseMode` to go back to the emulator.
+   Then Sync and Run. Remove `al.firebaseMode` to go back to the emulator (the JSON file can stay).
 
 Back to the emulators: `FIREBASE_MODE=emulator` (or delete the line) and restart.
 All three parts must use the same mode: a token from the real project is rejected

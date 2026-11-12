@@ -9,7 +9,10 @@ activityCompose = "1.13.0"
 kotlin = "2.2.10"
 composeBom = "2026.02.01"
 navigationCompose = "2.10.2"
+# 35.x is compiled with Kotlin 2.4; this project is on Kotlin 2.2 (see `kotlin` above), so stay on 34.x
+# until the team upgrades Kotlin. Then bump both together.
 firebaseBom = "34.4.0"
+googleServices = "4.5.0"
 okhttp = "4.12.0"
 coroutinesPlayServices = "1.10.2"
 
@@ -37,6 +40,7 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 
 [plugins]
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
