@@ -13,6 +13,7 @@ import './aero.css';
 import {authConfigurationError} from './firebase.js';
 import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
 import {authErrorMessage} from './authErrors.js';
+import {getMyProfile, profileErrorMessage, roleLabel} from './api.js';
 
 
 
@@ -35,6 +36,7 @@ const applicationRows = [
 
 function App(){
   const [session,setSession]=useState({user:null,loading:!authConfigurationError,error:''});
+  const [profile,setProfile]=useState({data:null,loading:false,error:''});
   const [loggingOut,setLoggingOut]=useState(false);
   const [logoutError,setLogoutError]=useState('');
   const [preferences,setPreferences]=useState(loadPreferences);
@@ -71,6 +73,17 @@ function App(){
     return ()=>{version++;unsubscribe();};
   },[]);
 
+  // The profile shown in the workspace comes from AL-Core (GET /api/v1/users/me), not from local data.
+  useEffect(()=>{
+    if(!session.user){setProfile({data:null,loading:false,error:''});return;}
+    let cancelled=false;
+    setProfile({data:null,loading:true,error:''});
+    getMyProfile()
+      .then(data=>{if(!cancelled) setProfile({data,loading:false,error:''});})
+      .catch(error=>{if(!cancelled) setProfile({data:null,loading:false,error:profileErrorMessage(error)});});
+    return ()=>{cancelled=true;};
+  },[session.user]);
+
   async function handleLogout(){
     if(loggingOut) return;
     setLoggingOut(true);setLogoutError('');
@@ -85,9 +98,12 @@ function App(){
   return <div className="app-shell">
     <Sidebar page={page} setPage={setPage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} loggingOut={loggingOut}/>
     <div className="main-shell">
-      <Topbar setMobileOpen={setMobileOpen} preferences={{...preferences,name:session.user.displayName||session.user.email||'Signed-in user'}}/>
+      <Topbar setMobileOpen={setMobileOpen}
+        name={profile.data?.full_name||session.user.displayName||session.user.email||'Signed-in user'}
+        subtitle={profile.loading?'Loading profile...':profile.data?roleLabel(profile.data.role):'Signed in'}/>
       <main key={page} id="main-content" className="page-wrap">
         {logoutError&&<p className="auth-error" role="alert">Could not sign out. {logoutError}</p>}
+        {profile.error&&<p className="auth-error" role="alert">{profile.error}</p>}
         {page==='dashboard' && <Dashboard setPage={setPage}/>} 
         {page==='pipeline' && <Pipeline setPage={setPage}/>} 
         {page==='loan' && <LoanFile setPage={setPage}/>} 
@@ -97,7 +113,7 @@ function App(){
         {page==='brokers' && <Brokers/>}
         {page==='analytics' && <Analytics/>}
         {page==='documents' && <Documents/>}
-        {page==='settings' && <SettingsPage preferences={preferences} onSave={setPreferences}/>}
+        {page==='settings' && <SettingsPage preferences={preferences} onSave={setPreferences} profile={profile.data}/>}
       </main>
     </div>
   </div>
@@ -121,11 +137,11 @@ function Sidebar({page,setPage,mobileOpen,setMobileOpen,onLogout,loggingOut}){
   </>
 }
 
-function Topbar({setMobileOpen,preferences}){
+function Topbar({setMobileOpen,name,subtitle}){
   return <header className="topbar">
     <button className="icon-btn mobile-only" aria-label="Open menu" onClick={()=>setMobileOpen(true)}><Menu/></button>
     <div className="search"><Search size={18}/><input aria-label="Search" placeholder="Search loans, brokers, or documents..."/></div>
-    <div className="top-actions"><button className="icon-btn" aria-label="Notifications"><Bell/></button><div className="avatar" aria-hidden="true">{preferences.name.split(/\s+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('')}</div><div className="user-meta"><strong>{preferences.name}</strong><span>Signed in</span></div></div>
+    <div className="top-actions"><button className="icon-btn" aria-label="Notifications"><Bell/></button><div className="avatar" aria-hidden="true">{name.split(/\s+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('')}</div><div className="user-meta"><strong>{name}</strong><span>{subtitle}</span></div></div>
   </header>
 }
 
@@ -432,8 +448,9 @@ function Documents(){
 }
 
 const preferencesKey='agentic-lender.preferences.v1';
+// Account details (name, email, role) come from AL-Core; only these local preferences are stored.
 const defaultPreferences={
-  name:'Sarah Chen',email:'sarah.chen@example.com',organisation:'Agentic Lender',
+  organisation:'Agentic Lender',
   applicationUpdates:true,documentRequests:true,weeklySummary:false,
   density:'comfortable',reduceMotion:false,
 };
@@ -442,9 +459,7 @@ function loadPreferences(){
     const saved=JSON.parse(localStorage.getItem(preferencesKey));
     if(!saved||typeof saved!=='object') return {...defaultPreferences};
     const result={...defaultPreferences};
-    for(const key of ['name','email','organisation']){
-      if(typeof saved[key]==='string'&&saved[key].trim()) result[key]=saved[key].trim().slice(0,key==='email'?254:80);
-    }
+    if(typeof saved.organisation==='string'&&saved.organisation.trim()) result.organisation=saved.organisation.trim().slice(0,80);
     for(const key of ['applicationUpdates','documentRequests','weeklySummary','reduceMotion']){
       if(typeof saved[key]==='boolean') result[key]=saved[key];
     }
@@ -452,7 +467,7 @@ function loadPreferences(){
     return result;
   } catch { return {...defaultPreferences}; }
 }
-function SettingsPage({preferences,onSave}){
+function SettingsPage({preferences,onSave,profile}){
   const [draft,setDraft]=useState(()=>({...preferences}));
   const [notice,setNotice]=useState('');
   const [error,setError]=useState('');
@@ -460,8 +475,8 @@ function SettingsPage({preferences,onSave}){
   function change(key,value){setDraft(current=>({...current,[key]:value}));setNotice('');setError('');}
   function save(event){
     event.preventDefault();
-    const next={...draft,name:draft.name.trim(),email:draft.email.trim(),organisation:draft.organisation.trim()};
-    if(!next.name||!next.organisation){setError('Enter a name and organisation.');return;}
+    const next={...draft,organisation:draft.organisation.trim()};
+    if(!next.organisation){setError('Enter an organisation.');return;}
     try {localStorage.setItem(preferencesKey,JSON.stringify(next));}
     catch {setError('Settings could not be saved in this browser. Please try again.');return;}
     onSave(next);setDraft(next);setError('');setNotice('Settings saved in this browser.');
@@ -470,12 +485,13 @@ function SettingsPage({preferences,onSave}){
     <Hero eyebrow="Sample workspace" title="Settings" subtitle="Your profile, notification preferences, and workspace appearance." compact/>
     <form className="settings-form" onSubmit={save}>
       <section className="settings-section" aria-labelledby="settings-profile-title">
-        <div className="settings-section-title"><UserRoundCheck size={21}/><div><h2 id="settings-profile-title">Profile</h2><p>Account and organisation details.</p></div></div>
+        <div className="settings-section-title"><UserRoundCheck size={21}/><div><h2 id="settings-profile-title">Profile</h2><p>Account details from AL-Core. Organisation is saved in this browser.</p></div></div>
         <div className="settings-fields">
-          <label>Full name<input name="name" autoComplete="name" maxLength={80} required value={draft.name} onChange={e=>change('name',e.target.value)}/></label>
-          <label>Email address<input name="email" type="email" autoComplete="email" maxLength={254} required value={draft.email} onChange={e=>change('email',e.target.value)}/></label>
+          <label>Full name<input name="name" value={profile?.full_name||''} placeholder="Not set" readOnly/></label>
+          <label>Email address<input name="email" type="email" value={profile?.email||''} readOnly/></label>
+          <label>Phone<input name="phone" value={profile?.phone||''} placeholder="Not set" readOnly/></label>
+          <label>Account role<input value={profile?roleLabel(profile.role):''} readOnly/></label>
           <label>Organisation<input name="organisation" autoComplete="organization" maxLength={80} required value={draft.organisation} onChange={e=>change('organisation',e.target.value)}/></label>
-          <label>Account role<input value="Underwriter" readOnly/></label>
         </div>
       </section>
       <section className="settings-section" aria-labelledby="settings-notifications-title">

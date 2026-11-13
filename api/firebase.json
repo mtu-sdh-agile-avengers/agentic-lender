@@ -8,15 +8,28 @@
   },
   "emulators": {
     "auth": {
+      "host": "0.0.0.0",
       "port": 9099
     },
     "firestore": {
+      "host": "0.0.0.0",
       "port": 8080,
+      "edition": "enterprise",
       "rules": "src/firebase/firestore.rules",
       "indexes": "src/firebase/firestore.indexes.json"
     },
     "ui": {
-      "enabled": true
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 4000
+    },
+    "hub": {
+      "host": "0.0.0.0",
+      "port": 4400
+    },
+    "logging": {
+      "host": "0.0.0.0",
+      "port": 4500
     },
     "singleProjectMode": true
   },

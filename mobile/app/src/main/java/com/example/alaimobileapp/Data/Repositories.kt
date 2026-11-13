@@ -16,10 +16,11 @@ import kotlin.math.roundToInt
 
 /**
  * Single place where the app's services are created.
- * Needs Firestore, ML endpoint and Stripe implementations
+ * Auth is real (Firebase Auth + AL-Core). Still needed: loans, ML endpoint and Stripe implementations.
  */
 object AppContainer {
-    val auth: AuthRepository = AuthViewRepository()
+    // lazy: Firebase is initialised in ALApplication.onCreate, before first use
+    val auth: AuthRepository by lazy { AuthViewRepository() }
     val loans: LoanRepository = FakeLoanRepository()
     val valuation: ValuationService = FakeValuationService()
     val broker: BrokerRepository = FakeBrokerRepository()

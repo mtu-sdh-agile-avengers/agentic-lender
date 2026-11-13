@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import RedirectResponse
 from loguru import logger
+from src.ai_engine.dependencies import AIEngineClientDep
 from src.config import get_config
 from src.firebase.connection import get_firestore, init_firebase
 from fastapi.middleware.cors import CORSMiddleware
@@ -66,6 +67,18 @@ async def root(request: Request):
 async def health(request: Request):
     logger.debug("GET health route requested")
     return {"status": "ok"}
+
+@app.get(
+    "/health/dependencies",
+    tags=["health"],
+    description="Checks services AL-Core depends on. AI engine: reachable, X-Internal-Key accepted, model loaded.",
+)
+@limiter.limit("1/second")
+async def health_dependencies(request: Request, ai_engine: AIEngineClientDep):
+    logger.debug("GET health/dependencies route requested")
+    ai_status = await ai_engine.status()
+    healthy = ai_status.reachable and ai_status.internal_key_accepted
+    return {"status": "ok" if healthy else "degraded", "ai_engine": ai_status.model_dump()}
 
 logger.debug("Loading routers...")
 load_routers(app, users_router)

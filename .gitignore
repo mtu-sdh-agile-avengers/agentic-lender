@@ -110,3 +110,10 @@ node_modules/
 # AI Engine
 ai/ml/data/
 ai/ml/models/
+
+# Firebase secrets: service account keys and app config files stay local
+api/secrets/*
+!api/secrets/README.md
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
