@@ -46,7 +46,6 @@ function App(){
   },[preferences.density,preferences.reduceMotion]);
   const [page,setPage] = useState('dashboard');
   const [mobileOpen,setMobileOpen] = useState(false);
-  const [role,setRole] = useState('Underwriter');
   const [decision,setDecision] = useState('Approve');
   const [scenario,setScenario] = useState({economic:'Recession', rate:2, price:-20});
 
@@ -93,7 +92,7 @@ function App(){
   }
 
   if(session.loading) return <div className="auth-loading" role="status"><Leaf size={28}/><span>Restoring your session...</span></div>;
-  if(!session.user) return <Login role={role} setRole={setRole} sessionError={session.error}/>;
+  if(!session.user) return <Login sessionError={session.error}/>;
 
   return <div className="app-shell">
     <Sidebar page={page} setPage={setPage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} loggingOut={loggingOut}/>
@@ -145,7 +144,7 @@ function Topbar({setMobileOpen,name,subtitle}){
   </header>
 }
 
-function Login({role,setRole,sessionError}){
+function Login({sessionError}){
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [pending,setPending]=useState('');
@@ -175,7 +174,6 @@ function Login({role,setRole,sessionError}){
       <p>Intelligent lending. Cleaner decisions.</p>
       <label>Email<input name="email" type="email" autoComplete="username" required placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)} disabled={!!pending}/></label>
       <label>Password<input name="password" type="password" autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={e=>setPassword(e.target.value)} disabled={!!pending}/></label>
-      <label>Select role<select value={role} onChange={e=>setRole(e.target.value)} disabled={!!pending}><option>Underwriter</option><option>Mortgage Broker</option></select></label>
       {(authConfigurationError||error||sessionError)&&<p className="auth-error" role="alert">{authConfigurationError||error||sessionError}</p>}
       {notice&&<p className="auth-notice" role="status">{notice}</p>}
       <button type="submit" className="primary wide" disabled={!!pending||!!authConfigurationError}>{pending==='signin'?'Signing in...':'Sign in'} <ArrowRight size={18}/></button>
