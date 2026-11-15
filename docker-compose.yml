@@ -1,0 +1,147 @@
+# Agentic Lender: the whole backend stack with one command.
+#
+#   docker compose up --build        # first time (builds images)
+#   docker compose up                # afterwards
+#
+# Ports (agreed in Phase 0):
+#   8000  AL-Core API          http://localhost:8000/docs
+#   8001  AL-AI Engine         http://localhost:8001/ready   (bound to localhost only)
+#   5173  AL-Web (Vite)        http://localhost:5173
+#   9099  Firebase Auth emulator
+#   8080  Firestore emulator
+#   4000  Emulator UI          http://localhost:4000
+#
+# Mobile runs outside Docker (Android Studio); the Android emulator reaches
+# these ports on the host at 10.0.2.2.
+#
+# Values come from a root .env file (copy .env.example). Every variable has a
+# working default, so `docker compose up` also works without one.
+#
+# Firebase: FIREBASE_MODE=emulator (default, local emulators, no credentials)
+# or FIREBASE_MODE=cloud (the real project; needs api/secrets/service-account.json
+# and the web app config in .env). See docs/run-guide.md, "Real Firebase".
+
+name: agentic-lender
+
+x-firebase-mode: &firebase-mode ${FIREBASE_MODE:-emulator}
+x-firebase-project: &firebase-project ${FIREBASE_PROJECT_ID:-demo-agentic-lender}
+x-internal-key: &internal-key ${INTERNAL_API_KEY:-al-dev-internal-key}
+
+services:
+
+  # Firebase Emulator Suite (Auth + Firestore + UI). No real credentials, no quota.
+  firebase:
+    build: ./infra/firebase-emulator
+    image: agentic-lender/firebase-emulator:dev
+    environment:
+      FIREBASE_PROJECT_ID: *firebase-project
+    volumes:
+      # api/ owns the Firebase config; mounted file by file so the emulator can
+      # still write its logs into /firebase
+      - ./api/firebase.json:/firebase/firebase.json:ro
+      - ./api/src/firebase/firestore.rules:/firebase/src/firebase/firestore.rules:ro
+      - ./api/src/firebase/firestore.indexes.json:/firebase/src/firebase/firestore.indexes.json:ro
+    ports:
+      - "9099:9099"   # Auth
+      - "8080:8080"   # Firestore
+      - "4000:4000"   # Emulator UI
+      - "4400:4400"   # Emulator hub (used by the UI)
+      - "4500:4500"   # Logging (used by the UI)
+
+  # One-shot: creates the demo accounts (borrower, broker, bank officer), then exits.
+  # Emulator data is in memory, so this runs on every `up`. Idempotent.
+  # With FIREBASE_MODE=cloud it does nothing; seed the real project by hand:
+  #   docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud
+  seed:
+    build: ./api
+    image: agentic-lender/api:dev
+    command: ["python", "-m", "src.scripts.seed_demo_accounts"]
+    environment: &api-env
+      RUN_MODE: dev
+      FIREBASE_MODE: *firebase-mode
+      # emulator mode
+      FIREBASE_PROJECT_ID: *firebase-project
+      FIRESTORE_EMULATOR_HOST: firebase:8080
+      FIREBASE_AUTH_EMULATOR_HOST: firebase:9099
+      # cloud mode: the key file is mounted from api/secrets/ (gitignored), never baked into the image
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase/service-account.json
+      FIRESTORE_PROD_DATABASE_NAME: ${FIRESTORE_PROD_DATABASE_NAME:-default}
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000","http://127.0.0.1:3000"]'
+      AI_ENGINE_URL: http://ai:8001
+      INTERNAL_API_KEY: *internal-key
+    volumes: &firebase-secrets
+      - ./api/secrets:/run/secrets/firebase:ro
+    depends_on:
+      firebase:
+        condition: service_healthy
+    restart: "no"
+
+  # AL-Core: REST API for web and mobile. Verifies Firebase ID tokens, reads Firestore.
+  api:
+    build: ./api
+    image: agentic-lender/api:dev
+    environment: *api-env
+    volumes: *firebase-secrets
+    ports:
+      - "8000:8000"
+    depends_on:
+      firebase:
+        condition: service_healthy
+      ai:
+        condition: service_started   # AL-Core starts without it; /health/dependencies reports it
+
+  # AL-AI Engine: valuation model + agent committee. Only AL-Core calls it.
+  ai:
+    build: ./ai
+    image: agentic-lender/ai:dev
+    environment:
+      INTERNAL_API_KEY: *internal-key
+      CORE_BASE_URL: http://api:8000
+      HF_REPO_ID: ${HF_REPO_ID:-mtu-sdh-agile-avengers/agentic_lender}
+      HF_MODEL_FILENAME: ${HF_MODEL_FILENAME:-avm_v1.joblib}
+      HF_REVISION: ${HF_REVISION:-main}
+      HF_TOKEN: ${HF_TOKEN:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2}
+      # Ollama runs on the host machine, not in Docker
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - hf-cache:/home/app/.cache/huggingface   # model downloaded once, reused
+    ports:
+      - "127.0.0.1:8001:8001"   # internal service: reachable from this machine only
+
+  # AL-Web dev server with hot reload. Skip it with:
+  #   docker compose up firebase seed api ai
+  # and run `npm run dev` in web/ yourself.
+  web:
+    image: node:24-alpine   # firebase JS SDK 13 needs Node >= 24.12
+    working_dir: /app
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort"]
+    environment:
+      # the browser runs on the host, so these are host URLs, not container names
+      VITE_FIREBASE_MODE: *firebase-mode
+      VITE_FIREBASE_EMULATOR_PROJECT_ID: *firebase-project
+      VITE_AUTH_EMULATOR_URL: http://127.0.0.1:9099
+      # cloud mode: the Firebase web app config (values in the root .env, not in git)
+      VITE_FIREBASE_PROJECT_ID: ${FIREBASE_CLOUD_PROJECT_ID:-agentic-lender}
+      VITE_FIREBASE_AUTH_DOMAIN: ${FIREBASE_WEB_AUTH_DOMAIN:-agentic-lender.firebaseapp.com}
+      VITE_FIREBASE_API_KEY: ${FIREBASE_WEB_API_KEY:-}
+      VITE_FIREBASE_APP_ID: ${FIREBASE_WEB_APP_ID:-}
+      VITE_API_BASE_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"   # file watching through a Windows/macOS bind mount
+    volumes:
+      - ./web:/app
+      - web-node-modules:/app/node_modules   # Linux node_modules, separate from the host's
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  hf-cache:
+  web-node-modules:

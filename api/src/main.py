@@ -69,6 +69,19 @@ async def health(request: Request):
 
 logger.debug("Loading routers...")
 load_routers(app, users_router)
+    return {"status": "ok"}
+
+@app.get(
+    "/health/dependencies",
+    tags=["health"],
+    description="Checks services AL-Core depends on. AI engine: reachable, X-Internal-Key accepted, model loaded.",
+)
+@limiter.limit("1/second")
+async def health_dependencies(request: Request, ai_engine: AIEngineClientDep):
+    logger.debug("GET health/dependencies route requested")
+    ai_status = await ai_engine.status()
+    healthy = ai_status.reachable and ai_status.internal_key_accepted
+    return {"status": "ok" if healthy else "degraded", "ai_engine": ai_status.model_dump()}
 
 
 # uvicorn src.main:app --port 8000 --reload | uv run pytest -v

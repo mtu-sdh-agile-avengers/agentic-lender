@@ -1,7 +1,8 @@
 """Health and readiness endpoints.
 
-/health   - is the process alive? (used by Docker Compose and AL-Core)
-/ready    - is it actually able to serve? model loaded, providers configured
+/health          - is the process alive? (used by Docker Compose and AL-Core)
+/ready           - is it actually able to serve? model loaded, providers configured
+/internal/ping   - does AL-Core's X-Internal-Key match ours? (integration check)
 """
 
 import httpx
@@ -9,7 +10,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.deps import SettingsDep
+from app.deps import InternalAuth, SettingsDep
 
 router = APIRouter(tags=["health"])
 
@@ -19,6 +20,11 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     environment: str
+
+
+class PingResponse(BaseModel):
+    status: str
+    internal_auth: str  # "enforced" or "disabled" (no key configured)
 
 
 class ReadyResponse(BaseModel):
@@ -66,3 +72,17 @@ async def ready(request: Request, settings: SettingsDep) -> JSONResponse:
     )
     code = status.HTTP_200_OK if body.ready else status.HTTP_503_SERVICE_UNAVAILABLE
     return JSONResponse(status_code=code, content=body.model_dump())
+
+
+@router.get("/internal/ping", response_model=PingResponse,
+            dependencies=[InternalAuth])
+async def internal_ping(settings: SettingsDep) -> PingResponse:
+    """Cheap authenticated call, so AL-Core can prove the shared key is wired.
+
+    401 means the caller's X-Internal-Key does not match INTERNAL_API_KEY here.
+    Nothing else happens: no model, no network calls.
+    """
+    return PingResponse(
+        status="ok",
+        internal_auth="enforced" if settings.internal_api_key else "disabled",
+    )

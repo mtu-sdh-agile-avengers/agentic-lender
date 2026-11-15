@@ -21,6 +21,7 @@ from fastapi.requests import Request
 
 from app.config import get_settings
 from app.routers import deliberations, health, valuations
+from app.services.model_loader import load_model
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level,
@@ -35,19 +36,11 @@ async def lifespan(app: FastAPI):
     The valuation model is loaded once here, not per request: unpickling it
     takes time and memory, and every request would otherwise pay that cost.
     """
-    app.state.model_bundle = None
-
-    if settings.model_path.exists():
-        try:
-            import joblib
-            app.state.model_bundle = joblib.load(settings.model_path)
-            logger.info("loaded valuation model %s from %s",
-                        app.state.model_bundle.get("version"), settings.model_path)
-        except Exception:
-            logger.exception("failed to load valuation model")
-    else:
-        logger.warning("no model at %s - run ml/train_avm.py first",
-                       settings.model_path)
+    app.state.model_bundle = load_model(settings)
+    if app.state.model_bundle is None:
+        logger.warning("no valuation model available; /v1/valuations will "
+                       "answer 503. Train one with ml/train_avm.py or set "
+                       "HF_REPO_ID.")
 
     if not settings.internal_api_key:
         logger.warning("INTERNAL_API_KEY is empty: internal auth is disabled")

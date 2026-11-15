@@ -8,10 +8,56 @@ import firebase_admin
 from firebase_admin import credentials, firestore_async
 from google.cloud.firestore import AsyncClient
 from loguru import logger
-from src.config import RunMode, get_config
 
 _FIRESTORE_EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
 _FIREBASE_AUTH_EMULATOR_ENV = "FIREBASE_AUTH_EMULATOR_HOST"
+
+
+class _EmulatorCredential(credentials.Base):
+    """Placeholder credential for the emulator suite (dev only).
+
+    Emulators accept any credentials, so a service account key is not required to run AL-Core locally
+    or in Docker Compose. Never used in prod.
+    """
+
+    def get_credential(self):
+        return AnonymousCredentials()
+
+
+def _load_certificate(path: str) -> credentials.Certificate:
+    try:
+        return credentials.Certificate(path)
+    except FileNotFoundError:
+        logger.error(f"Service account key .json file not found: {path}")
+        raise
+
+
+def _cloud_credential() -> credentials.Certificate:
+    """Service account for the real project. Fails fast with a readable message instead of a Firebase stack trace.
+
+    FIREBASE_SERVICE_ACCOUNT_JSON (the key itself) wins over GOOGLE_APPLICATION_CREDENTIALS (a path to it).
+    """
+    config = get_config()
+    if not config.firestore_prod_database_name:
+        raise RuntimeError("Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs FIRESTORE_PROD_DATABASE_NAME")
+
+    if config.firebase_service_account_json:
+        try:
+            return credentials.Certificate(json.loads(config.firebase_service_account_json))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON is not valid JSON") from exc
+
+    if not config.google_application_credentials:
+        raise RuntimeError(
+            "Real Firebase (FIREBASE_MODE=cloud / RUN_MODE=prod) needs a service account key: "
+            "FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS"
+        )
+    if not os.path.isfile(config.google_application_credentials):
+        raise FileNotFoundError(
+            f"Service account key not found at {config.google_application_credentials}. "
+            "Download it from Firebase Console -> Project settings -> Service accounts."
+        )
+    return _load_certificate(config.google_application_credentials)
 
 
 def init_firebase() -> None:
