@@ -34,9 +34,15 @@ const applicationRows = [
   {id:'AL-1038', borrower:'Lakeside Ventures', property:'Waterford', amount:'€300k', ltv:'75%', risk:'Medium', status:'Under Review'},
 ];
 
+// ALG4-68: AL-Web is for brokers and bank officers; borrowers use AL Mobile.
+const BORROWER_ROLE='retail_borrower';
+const BORROWER_PORTAL_MESSAGE='This portal is for brokers and bank officers. Borrowers sign in on the AL Mobile app.';
+
 function App(){
   const [session,setSession]=useState({user:null,loading:!authConfigurationError,error:''});
   const [profile,setProfile]=useState({data:null,loading:false,error:''});
+  // Kept apart from session.error, which the session observer clears on sign-out.
+  const [portalNotice,setPortalNotice]=useState('');
   const [loggingOut,setLoggingOut]=useState(false);
   const [logoutError,setLogoutError]=useState('');
   const [preferences,setPreferences]=useState(loadPreferences);
@@ -46,7 +52,6 @@ function App(){
   },[preferences.density,preferences.reduceMotion]);
   const [page,setPage] = useState('dashboard');
   const [mobileOpen,setMobileOpen] = useState(false);
-  const [role,setRole] = useState('Underwriter');
   const [decision,setDecision] = useState('Approve');
   const [scenario,setScenario] = useState({economic:'Recession', rate:2, price:-20});
 
@@ -79,7 +84,14 @@ function App(){
     let cancelled=false;
     setProfile({data:null,loading:true,error:''});
     getMyProfile()
-      .then(data=>{if(!cancelled) setProfile({data,loading:false,error:''});})
+      .then(data=>{
+        if(cancelled) return;
+        setProfile({data,loading:false,error:''});
+        if(data?.role===BORROWER_ROLE){
+          setPortalNotice(BORROWER_PORTAL_MESSAGE);
+          logoutUser().catch(error=>setLogoutError(authErrorMessage(error)));
+        }
+      })
       .catch(error=>{if(!cancelled) setProfile({data:null,loading:false,error:profileErrorMessage(error)});});
     return ()=>{cancelled=true;};
   },[session.user]);
@@ -93,7 +105,11 @@ function App(){
   }
 
   if(session.loading) return <div className="auth-loading" role="status"><Leaf size={28}/><span>Restoring your session...</span></div>;
-  if(!session.user) return <Login role={role} setRole={setRole} sessionError={session.error}/>;
+  if(!session.user) return <Login sessionError={session.error} portalNotice={portalNotice} onSignInStart={()=>setPortalNotice('')}/>;
+  // Never show the workspace to a borrower while their sign-out is in progress.
+  if(profile.data?.role===BORROWER_ROLE) return <div className="auth-loading" role="status"><Leaf size={28}/>{logoutError
+    ?<><span>Could not sign out. {logoutError}</span><button className="secondary" onClick={handleLogout} disabled={loggingOut}>Try again</button></>
+    :<span>Signing out...</span>}</div>;
 
   return <div className="app-shell">
     <Sidebar page={page} setPage={setPage} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} loggingOut={loggingOut}/>
@@ -145,7 +161,7 @@ function Topbar({setMobileOpen,name,subtitle}){
   </header>
 }
 
-function Login({role,setRole,sessionError}){
+function Login({sessionError,portalNotice,onSignInStart}){
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
   const [pending,setPending]=useState('');
@@ -154,7 +170,7 @@ function Login({role,setRole,sessionError}){
   async function handleSubmit(event){
     event.preventDefault();
     if(pending||authConfigurationError) return;
-    setPending('signin');setError('');setNotice('');
+    setPending('signin');setError('');setNotice('');onSignInStart();
     try {await signIn(email,password);}
     catch(error){setError(authErrorMessage(error));}
     finally {setPassword('');setPending('');}
@@ -175,8 +191,7 @@ function Login({role,setRole,sessionError}){
       <p>Intelligent lending. Cleaner decisions.</p>
       <label>Email<input name="email" type="email" autoComplete="username" required placeholder="you@company.com" value={email} onChange={e=>setEmail(e.target.value)} disabled={!!pending}/></label>
       <label>Password<input name="password" type="password" autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={e=>setPassword(e.target.value)} disabled={!!pending}/></label>
-      <label>Select role<select value={role} onChange={e=>setRole(e.target.value)} disabled={!!pending}><option>Underwriter</option><option>Mortgage Broker</option></select></label>
-      {(authConfigurationError||error||sessionError)&&<p className="auth-error" role="alert">{authConfigurationError||error||sessionError}</p>}
+      {(authConfigurationError||error||sessionError||portalNotice)&&<p className="auth-error" role="alert">{authConfigurationError||error||sessionError||portalNotice}</p>}
       {notice&&<p className="auth-notice" role="status">{notice}</p>}
       <button type="submit" className="primary wide" disabled={!!pending||!!authConfigurationError}>{pending==='signin'?'Signing in...':'Sign in'} <ArrowRight size={18}/></button>
       <button type="button" className="text-link" onClick={handleReset} disabled={!!pending||!!authConfigurationError}>{pending==='reset'?'Sending reset instructions...':'Forgot password?'}</button>
