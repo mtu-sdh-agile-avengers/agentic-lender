@@ -1,4 +1,4 @@
-# AL-Core (FastAPI, port 8000).
+# AL-Core (FastAPI server, port 8000).
 #
 #   docker build -t al-core ./api
 #

@@ -91,16 +91,17 @@ def build_card(repo_id: str, bundle: dict) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--repo-id", default=DEFAULT_REPO,
-                        help="owner/name on the Hub")
+    parser.add_argument("--repo-id", default=DEFAULT_REPO, help="owner/name on the Hub")
     parser.add_argument("--private", action="store_true")
     parser.add_argument("--message", default=None, help="commit message")
     args = parser.parse_args()
 
     token = os.getenv("HF_TOKEN")
     if not token:
-        sys.exit("HF_TOKEN is not set. Create a write token at "
-                 "https://huggingface.co/settings/tokens")
+        sys.exit(
+            "HF_TOKEN is not set. Create a write token at "
+            "https://huggingface.co/settings/tokens"
+        )
     if not MODEL_PATH.exists():
         sys.exit(f"No model at {MODEL_PATH}. Run ml/train_avm.py first.")
 
@@ -110,35 +111,46 @@ def main() -> None:
     print(f"Publishing {version} ({size_mb:.0f} MB) to {args.repo_id}")
 
     api = HfApi(token=token)
-    api.create_repo(args.repo_id, repo_type="model", private=args.private,
-                    exist_ok=True)
+    api.create_repo(
+        args.repo_id, repo_type="model", private=args.private, exist_ok=True
+    )
 
-    api.upload_file(path_or_fileobj=str(MODEL_PATH),
-                    path_in_repo=MODEL_PATH.name,
-                    repo_id=args.repo_id,
-                    commit_message=args.message or f"model {version}")
+    api.upload_file(
+        path_or_fileobj=str(MODEL_PATH),
+        path_in_repo=MODEL_PATH.name,
+        repo_id=args.repo_id,
+        commit_message=args.message or f"model {version}",
+    )
 
     # A small metadata file lets callers check the version without downloading
     # 95 MB of model first.
-    meta = {"version": version,
-            "metrics": bundle.get("metrics", {}),
-            "trained_rows": bundle.get("trained_rows"),
-            "numeric_features": bundle.get("numeric_features"),
-            "categorical_features": bundle.get("categorical_features")}
-    api.upload_file(path_or_fileobj=json.dumps(meta, indent=2).encode(),
-                    path_in_repo="model_info.json",
-                    repo_id=args.repo_id,
-                    commit_message=f"metadata for {version}")
+    meta = {
+        "version": version,
+        "metrics": bundle.get("metrics", {}),
+        "trained_rows": bundle.get("trained_rows"),
+        "numeric_features": bundle.get("numeric_features"),
+        "categorical_features": bundle.get("categorical_features"),
+    }
+    api.upload_file(
+        path_or_fileobj=json.dumps(meta, indent=2).encode(),
+        path_in_repo="model_info.json",
+        repo_id=args.repo_id,
+        commit_message=f"metadata for {version}",
+    )
 
-    api.upload_file(path_or_fileobj=build_card(args.repo_id, bundle).encode(),
-                    path_in_repo="README.md",
-                    repo_id=args.repo_id,
-                    commit_message=f"model card for {version}")
+    api.upload_file(
+        path_or_fileobj=build_card(args.repo_id, bundle).encode(),
+        path_in_repo="README.md",
+        repo_id=args.repo_id,
+        commit_message=f"model card for {version}",
+    )
 
     if METRICS_PATH.exists():
-        api.upload_file(path_or_fileobj=str(METRICS_PATH),
-                        path_in_repo="model_metrics.md",
-                        repo_id=args.repo_id)
+        api.upload_file(
+            path_or_fileobj=str(METRICS_PATH),
+            path_in_repo="model_metrics.md",
+            repo_id=args.repo_id,
+        )
 
     print(f"Done: https://huggingface.co/{args.repo_id}")
 

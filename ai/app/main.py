@@ -24,8 +24,9 @@ from app.routers import deliberations, health, valuations
 from app.services.model_loader import load_model
 
 settings = get_settings()
-logging.basicConfig(level=settings.log_level,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 logger = logging.getLogger(settings.service_name)
 
 
@@ -38,9 +39,11 @@ async def lifespan(app: FastAPI):
     """
     app.state.model_bundle = load_model(settings)
     if app.state.model_bundle is None:
-        logger.warning("no valuation model available; /v1/valuations will "
-                       "answer 503. Train one with ml/train_avm.py or set "
-                       "HF_REPO_ID.")
+        logger.warning(
+            "no valuation model available; /v1/valuations will "
+            "answer 503. Train one with ml/train_avm.py or set "
+            "HF_REPO_ID."
+        )
 
     if not settings.internal_api_key:
         logger.warning("INTERNAL_API_KEY is empty: internal auth is disabled")
@@ -54,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="AL-AI Engine",
     description="Property valuation and multi-agent credit deliberation "
-                "for AL (Agentic Lender). Internal service, called by AL-Core.",
+    "for AL (Agentic Lender). Internal service, called by AL-Core.",
     version=settings.version,
     lifespan=lifespan,
 )
@@ -69,8 +72,7 @@ app.include_router(deliberations.router)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Never leak a stack trace to the caller; log it and return a clean error."""
     logger.exception("unhandled error on %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500,
-                        content={"detail": "internal server error"})
+    return JSONResponse(status_code=500, content={"detail": "internal server error"})
 
 
 @app.get("/", include_in_schema=False)

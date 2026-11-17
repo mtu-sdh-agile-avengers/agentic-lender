@@ -35,9 +35,12 @@ def test_internal_ping_rejects_a_wrong_key(monkeypatch):
     monkeypatch.setattr(get_settings(), "internal_api_key", "shared-secret")
     with TestClient(app) as client:
         assert client.get("/internal/ping").status_code == 401
-        assert client.get("/internal/ping",
-                          headers={"X-Internal-Key": "wrong"}).status_code == 401
-        ok = client.get("/internal/ping",
-                        headers={"X-Internal-Key": "shared-secret"})
+        assert (
+            client.get(
+                "/internal/ping", headers={"X-Internal-Key": "wrong"}
+            ).status_code
+            == 401
+        )
+        ok = client.get("/internal/ping", headers={"X-Internal-Key": "shared-secret"})
     assert ok.status_code == 200
     assert ok.json() == {"status": "ok", "internal_auth": "enforced"}

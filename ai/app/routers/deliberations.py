@@ -22,8 +22,7 @@ from app.services.jobs import job_store
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["deliberations"],
-                   dependencies=[InternalAuth])
+router = APIRouter(prefix="/v1", tags=["deliberations"], dependencies=[InternalAuth])
 
 
 class DeliberationAccepted(BaseModel):
@@ -55,14 +54,17 @@ async def _run_committee(job_id: str, application: dict, model_bundle: dict | No
     """Run the graph off the request path and store the outcome."""
     await job_store.mark_running(job_id)
     try:
-        committee = build_committee(model_bundle=model_bundle,
-                                    providers=_providers())
+        committee = build_committee(model_bundle=model_bundle, providers=_providers())
         # The graph is synchronous; keep the event loop free while it runs.
         final = await asyncio.to_thread(
-            committee.invoke, {"application": application, "trail": []})
+            committee.invoke, {"application": application, "trail": []}
+        )
         await job_store.finish(job_id, final)
-        logger.info("deliberation %s finished: %s", job_id,
-                    final.get("decision", {}).get("decision"))
+        logger.info(
+            "deliberation %s finished: %s",
+            job_id,
+            final.get("decision", {}).get("decision"),
+        )
         # TODO (ALG4-77 integration): POST the result to AL-Core at
         # {settings.core_base_url}/internal/deliberations/{application_id}/result
     except Exception as exc:
@@ -70,17 +72,19 @@ async def _run_committee(job_id: str, application: dict, model_bundle: dict | No
         await job_store.fail(job_id, f"{type(exc).__name__}: {exc}")
 
 
-@router.post("/deliberations", response_model=DeliberationAccepted,
-             status_code=status.HTTP_202_ACCEPTED)
-async def start_deliberation(application: ApplicationInput,
-                             background: BackgroundTasks,
-                             http_request: Request) -> DeliberationAccepted:
+@router.post(
+    "/deliberations",
+    response_model=DeliberationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_deliberation(
+    application: ApplicationInput, background: BackgroundTasks, http_request: Request
+) -> DeliberationAccepted:
     """Queue a committee run. Returns immediately: the run takes a while."""
     job_id = await job_store.create(application.application_id)
     model_bundle = getattr(http_request.app.state, "model_bundle", None)
 
-    background.add_task(_run_committee, job_id,
-                        application.model_dump(), model_bundle)
+    background.add_task(_run_committee, job_id, application.model_dump(), model_bundle)
 
     return DeliberationAccepted(
         job_id=job_id,
@@ -93,6 +97,7 @@ async def start_deliberation(application: ApplicationInput,
 async def get_deliberation(job_id: str) -> DeliberationStatus:
     job = await job_store.get(job_id)
     if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail="unknown job_id")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown job_id"
+        )
     return DeliberationStatus(**job)

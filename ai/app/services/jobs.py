@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 JobStatus = Literal["queued", "running", "done", "failed"]
 
-MAX_JOBS = 500          # oldest entries are dropped beyond this
+MAX_JOBS = 500  # oldest entries are dropped beyond this
 
 
 class JobStore:
@@ -51,15 +51,21 @@ class JobStore:
         async with self._lock:
             job = self._jobs.get(job_id)
             if job:
-                job.update(status="done", result=result,
-                           finished_at=datetime.now(timezone.utc).isoformat())
+                job.update(
+                    status="done",
+                    result=result,
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                )
 
     async def fail(self, job_id: str, error: str) -> None:
         async with self._lock:
             job = self._jobs.get(job_id)
             if job:
-                job.update(status="failed", error=error[:500],
-                           finished_at=datetime.now(timezone.utc).isoformat())
+                job.update(
+                    status="failed",
+                    error=error[:500],
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                )
 
     async def get(self, job_id: str) -> dict[str, Any] | None:
         async with self._lock:

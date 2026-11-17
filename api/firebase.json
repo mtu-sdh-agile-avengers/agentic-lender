@@ -15,9 +15,11 @@
       "host": "0.0.0.0",
       "port": 8080,
       "rules": "src/firebase/firestore.rules",
-      "indexes": "src/firebase/firestore.indexes.json"
+      "indexes": "src/firebase/firestore.indexes.json",
+      "edition": "enterprise"
     },
     "ui": {
+      "host": "0.0.0.0"
     },
     "singleProjectMode": true
   },

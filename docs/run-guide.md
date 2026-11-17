@@ -120,7 +120,7 @@ By default everything runs on the emulators. To use the real Firebase project
    FIREBASE_WEB_API_KEY=AIza...
    FIREBASE_WEB_APP_ID=1:158281929652:web:...
    ```
-3. `docker compose up --build`. AL-Core logs `Firebase initialized successfully (real project: agentic-lender)`.
+3. `docker compose up --build`. AL-Core logs `Firebase initialized successfully (cloud: agentic-lender)`.
 4. Demo accounts are not created automatically in the real project. Once, by hand:
    ```bash
    docker compose run --rm seed python -m src.scripts.seed_demo_accounts --cloud

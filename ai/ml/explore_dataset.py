@@ -69,13 +69,15 @@ def column_report(df: pd.DataFrame) -> pd.DataFrame:
         series = df[col]
         missing_pct = series.isna().mean() * 100
         sample = series.dropna().unique()[:3]
-        rows.append({
-            "column": col,
-            "dtype": str(series.dtype),
-            "missing_%": round(missing_pct, 1),
-            "unique": series.nunique(dropna=True),
-            "examples": ", ".join(str(v)[:25] for v in sample),
-        })
+        rows.append(
+            {
+                "column": col,
+                "dtype": str(series.dtype),
+                "missing_%": round(missing_pct, 1),
+                "unique": series.nunique(dropna=True),
+                "examples": ", ".join(str(v)[:25] for v in sample),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -95,14 +97,16 @@ def numeric_summary(df: pd.DataFrame) -> pd.DataFrame:
         iqr = q3 - q1
         low, high = q1 - 1.5 * iqr, q3 + 1.5 * iqr
         outliers = ((series < low) | (series > high)).sum()
-        rows.append({
-            "column": col,
-            "min": round(series.min(), 2),
-            "median": round(series.median(), 2),
-            "max": round(series.max(), 2),
-            "outliers": int(outliers),
-            "outlier_%": round(outliers / len(series) * 100, 1),
-        })
+        rows.append(
+            {
+                "column": col,
+                "min": round(series.min(), 2),
+                "median": round(series.median(), 2),
+                "max": round(series.max(), 2),
+                "outliers": int(outliers),
+                "outlier_%": round(outliers / len(series) * 100, 1),
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -120,6 +124,7 @@ def save_histograms(df: pd.DataFrame, out_dir: Path) -> None:
     """Pictures beat tables when you are hunting for skew and outliers."""
     try:
         import matplotlib
+
         matplotlib.use("Agg")  # no window needed, just save files
         import matplotlib.pyplot as plt
     except ImportError:
@@ -143,8 +148,11 @@ def save_histograms(df: pd.DataFrame, out_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Profile a CSV dataset")
     parser.add_argument("csv_path", type=Path)
-    parser.add_argument("--target", default=None,
-                        help="name of the price column, if you already know it")
+    parser.add_argument(
+        "--target",
+        default=None,
+        help="name of the price column, if you already know it",
+    )
     args = parser.parse_args()
 
     if not args.csv_path.exists():
@@ -166,8 +174,10 @@ def main() -> None:
     cats = categorical_summary(df)
 
     # ---- print to screen -------------------------------------------------
-    print(f"\nRows: {len(df):,}   Columns: {len(df.columns)}   "
-          f"Duplicate rows: {duplicates:,}")
+    print(
+        f"\nRows: {len(df):,}   Columns: {len(df.columns)}   "
+        f"Duplicate rows: {duplicates:,}"
+    )
     print("\nColumns:")
     print(cols.to_string(index=False))
     if not nums.empty:
@@ -186,8 +196,10 @@ def main() -> None:
     missing_features = [t for t in NAME_HINTS if t not in guesses]
     if missing_features:
         print(f"\nNo column found for: {', '.join(missing_features)}")
-        print("If 'price' or 'floor_area_m2' is missing, this dataset cannot "
-              "train the valuation model on its own.")
+        print(
+            "If 'price' or 'floor_area_m2' is missing, this dataset cannot "
+            "train the valuation model on its own."
+        )
 
     # ---- write the markdown report --------------------------------------
     report = [
@@ -203,8 +215,12 @@ def main() -> None:
     ]
     if not nums.empty:
         report += ["", "## Numeric columns", "", to_md(nums)]
-    report += ["", "## Verdict", "",
-               "_Fill this in: can this dataset train the AVM? What is missing?_"]
+    report += [
+        "",
+        "## Verdict",
+        "",
+        "_Fill this in: can this dataset train the AVM? What is missing?_",
+    ]
 
     report_path = out_dir / "profile.md"
     report_path.write_text("\n".join(report), encoding="utf-8")

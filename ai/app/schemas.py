@@ -12,29 +12,52 @@ from pydantic import BaseModel, Field, model_validator
 # The 15 Irish BER grades, best to worst. "SI_666" is an exemption code, not a
 # rating, so it is not accepted here.
 BER_GRADES = Literal[
-    "A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3",
-    "D1", "D2", "E1", "E2", "F", "G",
+    "A1",
+    "A2",
+    "A3",
+    "B1",
+    "B2",
+    "B3",
+    "C1",
+    "C2",
+    "C3",
+    "D1",
+    "D2",
+    "E1",
+    "E2",
+    "F",
+    "G",
 ]
 
 # Dwelling types present in the training data. Sites (land) are not valued.
 PROPERTY_TYPES = Literal[
-    "Detached", "Semi-D", "Terrace", "End of Terrace",
-    "Apartment", "Bungalow", "Townhouse", "Duplex", "Studio",
+    "Detached",
+    "Semi-D",
+    "Terrace",
+    "End of Terrace",
+    "Apartment",
+    "Bungalow",
+    "Townhouse",
+    "Duplex",
+    "Studio",
 ]
 
 
 class ValuationRequest(BaseModel):
     """What the borrower enters in the fair-price checker (AL-Mobile)."""
 
-    county: str = Field(..., examples=["Cork"],
-                        description="Republic of Ireland county")
+    county: str = Field(
+        ..., examples=["Cork"], description="Republic of Ireland county"
+    )
     floor_area_m2: float = Field(..., ge=20, le=600, examples=[110])
     bedrooms: int = Field(..., ge=1, le=10, examples=[3])
     bathrooms: int = Field(1, ge=0, le=10, examples=[2])
     property_type: PROPERTY_TYPES = Field(..., examples=["Semi-D"])
-    ber: BER_GRADES | None = Field(None, examples=["B2"],
-                                   description="Omit if the rating is unknown "
-                                               "or the property is exempt")
+    ber: BER_GRADES | None = Field(
+        None,
+        examples=["B2"],
+        description="Omit if the rating is unknown or the property is exempt",
+    )
 
     # Optional: the app may know exact coordinates. If not, the county centroid
     # is used, because the model relies heavily on location.

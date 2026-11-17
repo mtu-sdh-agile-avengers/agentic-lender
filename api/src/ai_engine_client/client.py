@@ -33,14 +33,17 @@ class AIEngineClient:
         base_url: str,
         internal_key: str,
         timeout: float = 5.0,
-        transport: httpx.AsyncBaseTransport | None = None,  # tests pass httpx.MockTransport
+        transport: httpx.AsyncBaseTransport
+        | None = None,  # required for tests (they pass httpx.MockTransport)
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._headers = {_INTERNAL_KEY_HEADER: internal_key} if internal_key else {}
         self._timeout = timeout
         self._transport = transport
 
-    async def _get(self, client: httpx.AsyncClient, path: str) -> tuple[int, dict[str, Any]]:
+    async def _get(
+        self, client: httpx.AsyncClient, path: str
+    ) -> tuple[int, dict[str, Any]]:
         response = await client.get(path)
         try:
             body = response.json()
@@ -53,7 +56,10 @@ class AIEngineClient:
         result = AIEngineStatus(url=self._base_url, reachable=False)
 
         async with httpx.AsyncClient(
-            base_url=self._base_url, headers=self._headers, timeout=self._timeout, transport=self._transport
+            base_url=self._base_url,
+            headers=self._headers,
+            timeout=self._timeout,
+            transport=self._transport,
         ) as client:
             try:
                 code, _ = await self._get(client, "/health")
@@ -62,7 +68,9 @@ class AIEngineClient:
                 code, _ = await self._get(client, "/internal/ping")
                 result.internal_key_accepted = code == 200
                 if code == 401:
-                    result.error = "AI engine rejected X-Internal-Key (INTERNAL_API_KEY differs)"
+                    result.error = (
+                        "AI engine rejected X-Internal-Key (INTERNAL_API_KEY differs)"
+                    )
 
                 # /ready answers 503 with the same body when the model is missing
                 _, ready = await self._get(client, "/ready")
@@ -70,6 +78,8 @@ class AIEngineClient:
                 result.model_loaded = bool(ready.get("model_loaded"))
                 result.model_version = ready.get("model_version")
             except httpx.HTTPError as exc:
-                result.error = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                result.error = (
+                    f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+                )
 
         return result

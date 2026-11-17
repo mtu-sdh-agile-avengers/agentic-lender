@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from src.ai_engine.client import AIEngineClient
+from src.ai_engine_client.client import AIEngineClient
 from src.config import get_config
 
 

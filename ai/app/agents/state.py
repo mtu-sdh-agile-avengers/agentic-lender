@@ -51,8 +51,9 @@ class AgentStep(BaseModel):
     seconds: float | None = None
 
 
-Decision = Literal["Approve", "Conditionally Approve", "Decline",
-                   "Unavailable", "Error"]
+Decision = Literal[
+    "Approve", "Conditionally Approve", "Decline", "Unavailable", "Error"
+]
 
 
 class CommitteeState(TypedDict, total=False):
