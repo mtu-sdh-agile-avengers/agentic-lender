@@ -13,14 +13,26 @@ BASE = {
 @pytest.mark.parametrize(
     ("run_mode", "firebase_mode", "emulators", "database"),
     [
-        (RunMode.DEV, None, True, "(default)"),                    # old behaviour: dev -> emulators
-        (RunMode.PROD, None, False, "default"),                    # old behaviour: prod -> real project
-        (RunMode.DEV, FirebaseMode.CLOUD, False, "default"),       # real Firebase, dev conveniences
-        (RunMode.PROD, FirebaseMode.EMULATOR, True, "(default)"),
+        (RunMode.DEV, None, True, "(default)"),  # old behavior: dev -> emulators
+        (RunMode.PROD, None, False, "default"),  # old behavior: prod -> cloud
+        (
+            RunMode.DEV,
+            FirebaseMode.CLOUD,
+            False,
+            "default",
+        ),  # new behavior: dev -> cloud
+        (
+            RunMode.PROD,
+            FirebaseMode.EMULATOR,
+            True,
+            "(default)",
+        ),  # new behavior: prod -> emulators
     ],
 )
 def test_firebase_mode_decides_emulators(run_mode, firebase_mode, emulators, database):
-    config = Config(**BASE, run_mode=run_mode, firebase_mode=firebase_mode, _env_file=None)
+    config = Config(
+        **BASE, run_mode=run_mode, firebase_mode=firebase_mode, _env_file=None
+    )
     assert config.use_emulators is emulators
     assert config.firestore_database_name == database
 

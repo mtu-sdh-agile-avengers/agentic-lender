@@ -42,14 +42,17 @@ def affordability_node(state: CommitteeState) -> CommitteeState:
 
     return {
         "affordability": result,
-        "trail": _step("affordability",
-                       f"DTI {result['dti_percent']}%, LTI {result['lti_multiple']}, "
-                       f"{len(result['breaches'])} breach(es)"),
+        "trail": _step(
+            "affordability",
+            f"DTI {result['dti_percent']}%, LTI {result['lti_multiple']}, "
+            f"{len(result['breaches'])} breach(es)",
+        ),
     }
 
 
-def valuation_node(state: CommitteeState, *, model_bundle: dict | None = None
-                   ) -> CommitteeState:
+def valuation_node(
+    state: CommitteeState, *, model_bundle: dict | None = None
+) -> CommitteeState:
     """ALG4-82. Reuses the same valuation service as POST /v1/valuations."""
     from app.schemas import ValuationRequest
     from app.services.valuation import value_property
@@ -72,12 +75,14 @@ def valuation_node(state: CommitteeState, *, model_bundle: dict | None = None
 
     return {
         "valuation": result,
-        "trail": _step("valuation",
-                       f"estimate EUR {result['estimate']:,}, "
-                       f"gap {result['gap_percent']:+.1f}%, "
-                       f"LTV {result['ltv_percent']}% on {result['ltv_basis']}",
-                       model=version,
-                       seconds=round(time.perf_counter() - started, 2)),
+        "trail": _step(
+            "valuation",
+            f"estimate EUR {result['estimate']:,}, "
+            f"gap {result['gap_percent']:+.1f}%, "
+            f"LTV {result['ltv_percent']}% on {result['ltv_basis']}",
+            model=version,
+            seconds=round(time.perf_counter() - started, 2),
+        ),
     }
 
 
@@ -93,8 +98,10 @@ def market_node(state: CommitteeState) -> CommitteeState:
         "sources": [],
         "stub": True,
     }
-    return {"market": result,
-            "trail": _step("market", "stub: external research not implemented yet")}
+    return {
+        "market": result,
+        "trail": _step("market", "stub: external research not implemented yet"),
+    }
 
 
 STRATEGIST_PROMPT = """You are a mortgage underwriting strategist at an Irish \
@@ -116,8 +123,9 @@ Return ONLY valid JSON, no markdown fences:
   "reason": string}}"""
 
 
-def strategist_node(state: CommitteeState, *, llm=None, providers=None
-                    ) -> CommitteeState:
+def strategist_node(
+    state: CommitteeState, *, llm=None, providers=None
+) -> CommitteeState:
     """ALG4-84. The only node that talks to language models.
 
     With `providers`, the decision is a vote across every configured model
@@ -127,35 +135,48 @@ def strategist_node(state: CommitteeState, *, llm=None, providers=None
     if providers:
         return _vote_for_decision(state, providers)
     if llm is None:
-        return {"decision": {"decision": "Unavailable",
-                             "reason": "no LLM provider configured"},
-                "trail": _step("strategist", "skipped: no provider")}
+        return {
+            "decision": {
+                "decision": "Unavailable",
+                "reason": "no LLM provider configured",
+            },
+            "trail": _step("strategist", "skipped: no provider"),
+        }
 
     prompt = STRATEGIST_PROMPT.format(
         affordability=json.dumps(state["affordability"]),
         valuation=json.dumps(state["valuation"]),
-        market=json.dumps(state.get("market", {})))
+        market=json.dumps(state.get("market", {})),
+    )
 
     started = time.perf_counter()
     try:
         raw = llm(prompt).strip()
-    except Exception as exc:                      # provider outage, see AGT-02
+    except Exception as exc:  # provider outage, see AGT-02
         logger.warning("strategist provider failed: %s", exc)
-        return {"decision": {"decision": "Unavailable", "reason": str(exc)[:200]},
-                "trail": _step("strategist", f"provider failed: {type(exc).__name__}")}
+        return {
+            "decision": {"decision": "Unavailable", "reason": str(exc)[:200]},
+            "trail": _step("strategist", f"provider failed: {type(exc).__name__}"),
+        }
 
-    cleaned = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    cleaned = (
+        raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    )
     try:
         decision = json.loads(cleaned)
     except json.JSONDecodeError:
         logger.warning("strategist returned unparseable output")
-        decision = {"decision": "Error", "reason": "model did not return valid JSON",
-                    "raw": raw[:500]}
+        decision = {
+            "decision": "Error",
+            "reason": "model did not return valid JSON",
+            "raw": raw[:500],
+        }
 
     seconds = round(time.perf_counter() - started, 2)
-    return {"decision": decision,
-            "trail": _step("strategist", str(decision.get("decision")),
-                           seconds=seconds)}
+    return {
+        "decision": decision,
+        "trail": _step("strategist", str(decision.get("decision")), seconds=seconds),
+    }
 
 
 def _vote_for_decision(state: CommitteeState, providers) -> CommitteeState:
@@ -165,19 +186,25 @@ def _vote_for_decision(state: CommitteeState, providers) -> CommitteeState:
     prompt = STRATEGIST_PROMPT.format(
         affordability=json.dumps(state["affordability"]),
         valuation=json.dumps(state["valuation"]),
-        market=json.dumps(state.get("market", {})))
+        market=json.dumps(state.get("market", {})),
+    )
 
     outcome = vote(prompt, providers)
     consensus = outcome["consensus"]
     decision = dict(consensus)
-    decision["votes"] = outcome["votes"]   # kept for the AL-Web audit console
+    decision["votes"] = outcome["votes"]  # kept for the AL-Web audit console
 
-    models = ", ".join(f"{v['provider']}={v.get('decision') or 'failed'}"
-                       for v in outcome["votes"])
-    return {"decision": decision,
-            "trail": _step("strategist",
-                           f"{consensus['decision']} by vote ({models})",
-                           seconds=consensus.get("seconds"))}
+    models = ", ".join(
+        f"{v['provider']}={v.get('decision') or 'failed'}" for v in outcome["votes"]
+    )
+    return {
+        "decision": decision,
+        "trail": _step(
+            "strategist",
+            f"{consensus['decision']} by vote ({models})",
+            seconds=consensus.get("seconds"),
+        ),
+    }
 
 
 def auto_decline_node(state: CommitteeState) -> CommitteeState:
@@ -210,18 +237,21 @@ def build_committee(model_bundle: dict | None = None, llm=None, providers=None):
     graph = StateGraph(CommitteeState)
 
     graph.add_node("affordability", affordability_node)
-    graph.add_node("valuation",
-                   lambda state: valuation_node(state, model_bundle=model_bundle))
+    graph.add_node(
+        "valuation", lambda state: valuation_node(state, model_bundle=model_bundle)
+    )
     graph.add_node("market", market_node)
-    graph.add_node("strategist",
-                   lambda state: strategist_node(state, llm=llm,
-                                                 providers=providers))
+    graph.add_node(
+        "strategist", lambda state: strategist_node(state, llm=llm, providers=providers)
+    )
     graph.add_node("auto_decline", auto_decline_node)
 
     graph.set_entry_point("affordability")
-    graph.add_conditional_edges("affordability", route_after_affordability,
-                                {"valuation": "valuation",
-                                 "auto_decline": "auto_decline"})
+    graph.add_conditional_edges(
+        "affordability",
+        route_after_affordability,
+        {"valuation": "valuation", "auto_decline": "auto_decline"},
+    )
     graph.add_edge("valuation", "market")
     graph.add_edge("market", "strategist")
     graph.add_edge("strategist", END)

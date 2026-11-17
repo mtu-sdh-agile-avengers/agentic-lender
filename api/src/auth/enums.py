@@ -2,14 +2,14 @@ from enum import StrEnum
 from typing import Any
 
 
-class Role(StrEnum):
+class UserRole(StrEnum):
     UNSPECIFIED = ""
     BORROWER = "retail_borrower"
     BROKER = "mortgage_broker"
     BANK_OFFICER = "underwriting_bank_officer"
 
     @classmethod
-    def parse(cls, value: Any) -> Role:
+    def parse(cls, value: Any) -> UserRole:
         try:
             return cls(value)
         except ValueError:

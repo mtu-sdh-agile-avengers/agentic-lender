@@ -16,8 +16,8 @@ json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 echo "== AL-Core -> AI engine"
 deps=$(curl -fsS "$API/health/dependencies")
 echo "$deps"
-[ "$(echo "$deps" | json 'd["ai_engine"]["internal_key_accepted"]')" = "True" ] || { echo "AI engine rejected the internal key"; exit 1; }
-[ "$(echo "$deps" | json 'd["ai_engine"]["model_loaded"]')" = "True" ] || { echo "AI engine has no model"; exit 1; }
+[ "$(echo "$deps" | json 'd["ai_engine_client"]["internal_key_accepted"]')" = "True" ] || { echo "AI engine rejected the internal key"; exit 1; }
+[ "$(echo "$deps" | json 'd["ai_engine_client"]["model_loaded"]')" = "True" ] || { echo "AI engine has no model"; exit 1; }
 
 check_role() {
   local email=$1 expected=$2 token profile role

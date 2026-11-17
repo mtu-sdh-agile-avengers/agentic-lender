@@ -74,8 +74,7 @@ async def ready(request: Request, settings: SettingsDep) -> JSONResponse:
     return JSONResponse(status_code=code, content=body.model_dump())
 
 
-@router.get("/internal/ping", response_model=PingResponse,
-            dependencies=[InternalAuth])
+@router.get("/internal/ping", response_model=PingResponse, dependencies=[InternalAuth])
 async def internal_ping(settings: SettingsDep) -> PingResponse:
     """Cheap authenticated call, so AL-Core can prove the shared key is wired.
 

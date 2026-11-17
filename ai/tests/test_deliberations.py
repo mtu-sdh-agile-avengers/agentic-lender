@@ -9,11 +9,21 @@ from app.main import app
 
 APPLICATION = {
     "application_id": "APP-001",
-    "income": 85_000, "existing_debt": 4_000, "deposit": 50_000,
-    "loan": 300_000, "asking_price": 350_000,
-    "rate_percent": 3.9, "term_years": 30,
-    "property": {"county": "Cork", "floor_area_m2": 110, "bedrooms": 3,
-                 "bathrooms": 2, "property_type": "Semi-D", "ber": "B2"},
+    "income": 85_000,
+    "existing_debt": 4_000,
+    "deposit": 50_000,
+    "loan": 300_000,
+    "asking_price": 350_000,
+    "rate_percent": 3.9,
+    "term_years": 30,
+    "property": {
+        "county": "Cork",
+        "floor_area_m2": 110,
+        "bedrooms": 3,
+        "bathrooms": 2,
+        "property_type": "Semi-D",
+        "ber": "B2",
+    },
 }
 
 
@@ -53,8 +63,12 @@ def test_run_completes_and_returns_the_full_state(client):
 
 
 def test_hopeless_application_is_declined(client):
-    hopeless = {**APPLICATION, "application_id": "APP-002",
-                "income": 40_000, "loan": 400_000}
+    hopeless = {
+        **APPLICATION,
+        "application_id": "APP-002",
+        "income": 40_000,
+        "loan": 400_000,
+    }
     job_id = client.post("/v1/deliberations", json=hopeless).json()["job_id"]
     result = wait_for(client, job_id)["result"]
 
@@ -72,6 +86,8 @@ def test_invalid_application_is_rejected(client):
 
 
 def test_property_validation_applies_inside_the_application(client):
-    broken = {**APPLICATION,
-              "property": {**APPLICATION["property"], "floor_area_m2": 5_000}}
+    broken = {
+        **APPLICATION,
+        "property": {**APPLICATION["property"], "floor_area_m2": 5_000},
+    }
     assert client.post("/v1/deliberations", json=broken).status_code == 422

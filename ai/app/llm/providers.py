@@ -25,8 +25,12 @@ RETRYABLE_STATUS = {429, 500, 502, 503, 529}
 MAX_ATTEMPTS = 3
 
 # Tried in order when no explicit GEMINI_MODEL is configured
-GEMINI_FALLBACKS = ["gemini-3.5-flash", "gemini-3.5-flash-lite",
-                    "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+GEMINI_FALLBACKS = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+]
 
 
 class ProviderError(RuntimeError):
@@ -50,7 +54,7 @@ def _post_with_retry(url: str, **kwargs) -> requests.Response:
             response.raise_for_status()
             return response
         if attempt < MAX_ATTEMPTS:
-            wait = 2 ** attempt
+            wait = 2**attempt
             logger.info("retrying after HTTP %s in %ss", response.status_code, wait)
             time.sleep(wait)
     response.raise_for_status()
@@ -65,10 +69,13 @@ def make_groq(settings: Settings) -> Provider | None:
         response = _post_with_retry(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.groq_api_key}"},
-            json={"model": settings.groq_model,
-                  "messages": [{"role": "user", "content": prompt}],
-                  "temperature": 0.2},
-            timeout=TIMEOUT_SECONDS)
+            json={
+                "model": settings.groq_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+            },
+            timeout=TIMEOUT_SECONDS,
+        )
         return response.json()["choices"][0]["message"]["content"]
 
     return Provider(name="groq", model=settings.groq_model, call=call)
@@ -88,9 +95,12 @@ def make_gemini(settings: Settings) -> Provider | None:
                     "https://generativelanguage.googleapis.com/v1beta/models/"
                     f"{model}:generateContent",
                     headers={"x-goog-api-key": settings.gemini_api_key},
-                    json={"contents": [{"parts": [{"text": prompt}]}],
-                          "generationConfig": {"temperature": 0.2}},
-                    timeout=TIMEOUT_SECONDS)
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.2},
+                    },
+                    timeout=TIMEOUT_SECONDS,
+                )
                 parts = response.json()["candidates"][0]["content"]["parts"]
                 return parts[0]["text"]
             except requests.RequestException as exc:
@@ -108,15 +118,19 @@ def make_ollama(settings: Settings) -> Provider | None:
     def call(prompt: str) -> str:
         response = _post_with_retry(
             f"{settings.ollama_url}/api/chat",
-            json={"model": settings.ollama_model,
-                  "messages": [{"role": "user", "content": prompt}],
-                  "stream": False,
-                  "options": {"temperature": 0.2}},
-            timeout=TIMEOUT_SECONDS)
+            json={
+                "model": settings.ollama_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {"temperature": 0.2},
+            },
+            timeout=TIMEOUT_SECONDS,
+        )
         return response.json()["message"]["content"]
 
-    return Provider(name="ollama", model=settings.ollama_model, call=call,
-                    is_local=True)
+    return Provider(
+        name="ollama", model=settings.ollama_model, call=call, is_local=True
+    )
 
 
 def available_providers(settings: Settings) -> list[Provider]:

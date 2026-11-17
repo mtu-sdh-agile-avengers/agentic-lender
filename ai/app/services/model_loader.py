@@ -35,8 +35,11 @@ def resolve_model_path(settings: Settings) -> Path | None:
         return None
 
     try:
-        logger.info("downloading %s from %s (first run only)",
-                    settings.hf_model_filename, settings.hf_repo_id)
+        logger.info(
+            "downloading %s from %s (first run only)",
+            settings.hf_model_filename,
+            settings.hf_repo_id,
+        )
         path = hf_hub_download(
             repo_id=settings.hf_repo_id,
             filename=settings.hf_model_filename,
@@ -58,6 +61,7 @@ def load_model(settings: Settings) -> dict | None:
 
     try:
         import joblib
+
         bundle = joblib.load(path)
         logger.info("loaded valuation model %s", bundle.get("version"))
         return bundle

@@ -7,8 +7,12 @@ from app.services.model_loader import load_model, resolve_model_path
 
 
 def settings(**overrides) -> Settings:
-    base = {"model_path": Path("/does/not/exist.joblib"), "hf_repo_id": "",
-            "hf_token": "", "internal_api_key": ""}
+    base = {
+        "model_path": Path("/does/not/exist.joblib"),
+        "hf_repo_id": "",
+        "hf_token": "",
+        "internal_api_key": "",
+    }
     return Settings(**{**base, **overrides})
 
 

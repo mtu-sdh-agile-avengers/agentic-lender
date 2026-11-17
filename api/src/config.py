@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# default name of the Firestore database is "(default)"; does not depends on type (standard / enterprise)
+# default name of the Firestore database is "(default)"; does not depend on type (standard / enterprise)
 _DEFAULT_DATABASE = "(default)"
 
 
@@ -21,39 +21,41 @@ class RunMode(StrEnum):
     DEV = "dev"
 
 
+# Required which Firebase is used (local or cloud). Allows use the real project while keeping dev behavior (no rate limiting + debug logs).
 class FirebaseMode(StrEnum):
-    EMULATOR = "emulator"   # local Firebase emulator suite, no real credentials
-    CLOUD = "cloud"         # real Firebase project, service account key required
+    EMULATOR = "emulator"  # Firebase Local Emulator Suite, no real credentials required
+    CLOUD = "cloud"  # Actual Firebase project, service account key required
 
 
 class Config(BaseSettings):
     run_mode: Literal[RunMode.PROD, RunMode.DEV]
-
-    # Which Firebase AL-Core talks to. Not set: follows run_mode (dev -> emulator, prod -> cloud).
-    # Set FIREBASE_MODE=cloud to use the real project while keeping dev behaviour (no rate limiting, debug logs).
     firebase_mode: FirebaseMode | None = None
 
-    # service account key for the real Firebase project, either as a file (.json path) or as the JSON itself
-    # (hosts that keep secrets in environment variables: Azure Container Apps, GitHub Actions).
-    # Optional for the emulators.
+    # service Account key for the Firebase project, either as .json path to local file OR as the JSON string itself
+    # (hosts that keep secrets in environment variables: Azure Container Apps, GitHub Actions); optional for emulators
     google_application_credentials: str = ""
     firebase_service_account_json: str = ""
+
     firestore_prod_database_name: str = ""
     firestore_emulator_host: str = "127.0.0.1:8080"
     firebase_auth_emulator_host: str = "127.0.0.1:9099"
+
+    # ref: https://firebase.google.com/docs/emulator-suite/connect_firestore#choose_a_firebase_project
     # project ID the emulator suite runs under (`firebase emulators:start --project demo-agentic-lender`);
-    # used in dev when no service account key is provided
+    # used when FIREBASE_MODE=emulators or RUN_MODE=dev and FIREBASE_MODE= (is empty); "demo" prefix allows app to interact with emulators only
     firebase_project_id: str = "demo-agentic-lender"
 
-    # if init. overriden by CORS_ORIGINS in .env for other ports
+    # if initialized, could be overridden by CORS_ORIGINS in .env for other ports
     cors_origins: list[str]
 
-    # AL-AI Engine (internal service); AL-Core sends `internal_api_key` as X-Internal-Key header
+    # AL-Core sends `internal_api_key` as X-Internal-Key header to AI-Engine
     ai_engine_url: str = "http://localhost:8001"
     internal_api_key: str = ""
 
     # env_ignore_empty: `FIREBASE_MODE=` (empty) in .env means "not set", not an invalid value
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", env_ignore_empty=True)
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", env_ignore_empty=True
+    )
 
     @property
     def use_emulators(self) -> bool:

@@ -12,11 +12,11 @@ Ireland changes them, and the stress rate is lender policy.
 from dataclasses import dataclass, field
 
 # Central Bank of Ireland mortgage measures (first-time buyer defaults)
-LTI_LIMIT = 4.0            # loan as a multiple of gross annual income
-LTV_LIMIT_PCT = 90.0       # loan as a percentage of property value
+LTI_LIMIT = 4.0  # loan as a multiple of gross annual income
+LTV_LIMIT_PCT = 90.0  # loan as a percentage of property value
 # Lender policy
-DTI_LIMIT_PCT = 40.0       # total debt service as a share of gross income
-STRESS_BPS = 200           # repayments are tested 2 percentage points higher
+DTI_LIMIT_PCT = 40.0  # total debt service as a share of gross income
+STRESS_BPS = 200  # repayments are tested 2 percentage points higher
 OVERVALUED_THRESHOLD_PCT = 10.0
 
 
@@ -39,8 +39,11 @@ class Affordability:
             "lti_multiple": round(self.lti_multiple, 2),
             "disposable_annual": round(self.disposable_annual),
             "breaches": self.breaches,
-            "limits": {"lti": LTI_LIMIT, "dti_percent": DTI_LIMIT_PCT,
-                       "stress_bps": STRESS_BPS},
+            "limits": {
+                "lti": LTI_LIMIT,
+                "dti_percent": DTI_LIMIT_PCT,
+                "stress_bps": STRESS_BPS,
+            },
         }
 
 
@@ -53,8 +56,13 @@ def monthly_repayment(principal: float, annual_rate: float, years: int) -> float
     return principal * monthly_rate / (1 - (1 + monthly_rate) ** -payments)
 
 
-def assess_affordability(income: float, existing_debt: float, loan: float,
-                         rate_percent: float, term_years: int) -> Affordability:
+def assess_affordability(
+    income: float,
+    existing_debt: float,
+    loan: float,
+    rate_percent: float,
+    term_years: int,
+) -> Affordability:
     """Can the borrower service this loan if rates rise by STRESS_BPS?"""
     rate = rate_percent / 100
     stressed_rate = rate + STRESS_BPS / 10_000
@@ -74,16 +82,17 @@ def assess_affordability(income: float, existing_debt: float, loan: float,
 
     if result.lti_multiple > LTI_LIMIT:
         result.breaches.append(
-            f"loan-to-income {result.lti_multiple:.2f} exceeds the limit of {LTI_LIMIT}")
+            f"loan-to-income {result.lti_multiple:.2f} exceeds the limit of {LTI_LIMIT}"
+        )
     if result.dti_percent > DTI_LIMIT_PCT:
         result.breaches.append(
             f"stressed debt-to-income {result.dti_percent:.1f}% exceeds "
-            f"{DTI_LIMIT_PCT}%")
+            f"{DTI_LIMIT_PCT}%"
+        )
     return result
 
 
-def assess_collateral(loan: float, asking_price: float,
-                      estimate: float) -> dict:
+def assess_collateral(loan: float, asking_price: float, estimate: float) -> dict:
     """Loan-to-value against the LOWER of asking price and model estimate.
 
     Lending against the higher number is how a bank ends up over-exposed when
@@ -105,6 +114,8 @@ def assess_collateral(loan: float, asking_price: float,
         "ltv_percent": round(ltv, 1),
         "ltv_basis": "model estimate" if estimate < asking_price else "asking price",
         "breaches": breaches,
-        "limits": {"ltv_percent": LTV_LIMIT_PCT,
-                   "overvalued_threshold_percent": OVERVALUED_THRESHOLD_PCT},
+        "limits": {
+            "ltv_percent": LTV_LIMIT_PCT,
+            "overvalued_threshold_percent": OVERVALUED_THRESHOLD_PCT,
+        },
     }

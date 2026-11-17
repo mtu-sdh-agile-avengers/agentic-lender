@@ -17,8 +17,8 @@ from dataclasses import dataclass
 
 from firebase_admin import auth
 
-from src.auth.enums import Role
-from src.auth.gateway import FirebaseAuthGateway
+from src.auth.enums import UserRole
+from src.auth.gateways import FirebaseAuthGateway
 from src.config import get_config
 from src.firebase.connection import get_firestore, init_firebase
 from src.users.models import UserProfileModel
@@ -31,14 +31,26 @@ DEMO_PASSWORD = "Password1"
 class DemoAccount:
     email: str
     full_name: str
-    role: Role
+    role: UserRole
     phone: str | None = None
 
 
 DEMO_ACCOUNTS = (
-    DemoAccount("borrower@demo.agenticlender.ie", "Bríd Borrower", Role.BORROWER, "+353870000001"),
-    DemoAccount("broker@demo.agenticlender.ie", "Brian Broker", Role.BROKER, "+353870000002"),
-    DemoAccount("officer@demo.agenticlender.ie", "Orla Officer", Role.BANK_OFFICER, "+353870000003"),
+    DemoAccount(
+        "borrower@demo.agenticlender.ie",
+        "Bríd Borrower",
+        UserRole.BORROWER,
+        "+353870000001",
+    ),
+    DemoAccount(
+        "broker@demo.agenticlender.ie", "Brian Broker", UserRole.BROKER, "+353870000002"
+    ),
+    DemoAccount(
+        "officer@demo.agenticlender.ie",
+        "Orla Officer",
+        UserRole.BANK_OFFICER,
+        "+353870000003",
+    ),
 )
 
 
@@ -68,30 +80,42 @@ async def seed() -> None:
             await gateway.set_user_role(user.uid, account.role)
 
         if await repo.get_user_profile(user.uid) is None:
-            await repo.add_user_profile(UserProfileModel(
-                uid=user.uid,
-                email=account.email,
-                phone=account.phone,
-                full_name=account.full_name,
-                role=account.role,
-            ))
+            await repo.add_user_profile(
+                UserProfileModel(
+                    uid=user.uid,
+                    email=account.email,
+                    phone=account.phone,
+                    full_name=account.full_name,
+                    role=account.role,
+                )
+            )
 
         state = "created" if created else "exists "
-        print(f"  {state}  {account.role.value:<27} {account.email:<34} {DEMO_PASSWORD}")
+        print(
+            f"  {state}  {account.role.value:<27} {account.email:<34} {DEMO_PASSWORD}"
+        )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--cloud", action="store_true", help="really seed the real Firebase project")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--cloud", action="store_true", help="really seed the real Firebase project"
+    )
     args = parser.parse_args()
 
     if not get_config().use_emulators and not args.cloud:
         # Docker Compose runs this on every start; never touch the real project implicitly
-        print("Real Firebase is configured: skipping demo accounts. Run with --cloud to create them there.")
+        print(
+            "Real Firebase is configured: skipping demo accounts. Run with --cloud to create them there."
+        )
         return
 
     init_firebase()
-    target = "Firebase emulators" if get_config().use_emulators else "REAL Firebase project"
+    target = (
+        "Firebase emulators" if get_config().use_emulators else "REAL Firebase project"
+    )
     print(f"Seeding demo accounts ({target}):")
     asyncio.run(seed())
 

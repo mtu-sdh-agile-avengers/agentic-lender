@@ -2,16 +2,18 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from loguru import logger
-from src.ai_engine.dependencies import AIEngineClientDep
-from src.config import get_config
-from src.firebase.connection import get_firestore, init_firebase
-from fastapi.middleware.cors import CORSMiddleware
-from src.users.v1.router import router as users_router
-from src.rate_limiting import limiter
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+
+from src.ai_engine_client.dependencies import AIEngineClientDep
+from src.config import get_config
+from src.firebase.connection import init_firebase
+from src.rate_limiting import limiter
+from src.users.v1.router import router as users_router
+from src.loan_applications.v1.router import router as loan_applications_router
 
 
 @asynccontextmanager
@@ -19,9 +21,8 @@ async def lifespan(app: FastAPI):
     logger.debug(f"Server startup [{get_config().run_mode}]")
 
     init_firebase()
-    db = get_firestore()
     logger.debug(
-        f"database_string={db._database_string}, emulator={os.environ.get('FIRESTORE_EMULATOR_HOST')}"
+        f"database_string={get_config().firestore_database_name}, emulator={os.environ.get('FIRESTORE_EMULATOR_HOST')}"
     )
 
     yield
@@ -37,7 +38,7 @@ app = FastAPI(
     lifespan=lifespan,
     title="AL-Core",
     description="REST API for Agentic Lender.",
-    version="0.2.0",
+    version="0.3.0",
     docs_url="/docs/swagger",
     openapi_url="/docs/openapi.json",
     redoc_url="/docs",
@@ -45,7 +46,7 @@ app = FastAPI(
 
 # rate limiting set up
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler) # pyright: ignore[reportArgumentType]
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
 # CORS configuration
 logger.debug("Configuring CORS...")
@@ -53,35 +54,48 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_config().cors_origins,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-@app.get("/", tags=["root"], description="Redirects to \"/health\"")
+
+@app.get("/", tags=["root"], description='Redirects to "/health".')
 @limiter.limit("1/second")
 async def root(request: Request):
     logger.debug("GET root route requested")
     return RedirectResponse("/health")
 
-@app.get("/health", tags=["health"], description="Returns server status if it's avaliable.")
+
+@app.get(
+    "/health", tags=["health"], description="Returns server status if it's available."
+)
 @limiter.limit("1/second")
 async def health(request: Request):
     logger.debug("GET health route requested")
     return {"status": "ok"}
 
+
 @app.get(
     "/health/dependencies",
     tags=["health"],
-    description="Checks services AL-Core depends on. AI engine: reachable, X-Internal-Key accepted, model loaded.",
+    description="Checks availability of required services. AI engine: reachable, X-Internal-Key accepted, model loaded.",
 )
 @limiter.limit("1/second")
 async def health_dependencies(request: Request, ai_engine: AIEngineClientDep):
     logger.debug("GET health/dependencies route requested")
     ai_status = await ai_engine.status()
     healthy = ai_status.reachable and ai_status.internal_key_accepted
-    return {"status": "ok" if healthy else "degraded", "ai_engine": ai_status.model_dump()}
+    return {
+        "status": "ok" if healthy else "degraded",
+        "ai_engine_client": ai_status.model_dump(),
+    }
+
 
 logger.debug("Loading routers...")
-load_routers(app, users_router)
+load_routers(
+    app,
+    users_router,
+    loan_applications_router,
+)
 
 
 # uvicorn src.main:app --port 8000 --reload | uv run pytest -v

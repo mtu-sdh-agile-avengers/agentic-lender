@@ -73,29 +73,31 @@ def test_valuation_returns_estimate_and_range(model_client):
 
 def test_asking_price_comparison(model_client):
     body = model_client.post(
-        "/v1/valuations", json={**VALID, "asking_price": 2_000_000}).json()
+        "/v1/valuations", json={**VALID, "asking_price": 2_000_000}
+    ).json()
     assert body["comparison"]["overvalued"] is True
     assert body["comparison"]["gap_percent"] > 10
 
 
 def test_supplied_coordinates_are_used(model_client):
     body = model_client.post(
-        "/v1/valuations",
-        json={**VALID, "latitude": 51.90, "longitude": -8.47}).json()
+        "/v1/valuations", json={**VALID, "latitude": 51.90, "longitude": -8.47}
+    ).json()
     assert body["coordinates_source"] == "request"
 
 
 def test_dublin_costs_more_than_leitrim(model_client):
     """Sanity check: the model should still understand Irish geography."""
     dublin = model_client.post(
-        "/v1/valuations", json={**VALID, "county": "Dublin"}).json()
+        "/v1/valuations", json={**VALID, "county": "Dublin"}
+    ).json()
     leitrim = model_client.post(
-        "/v1/valuations", json={**VALID, "county": "Leitrim"}).json()
+        "/v1/valuations", json={**VALID, "county": "Leitrim"}
+    ).json()
     assert dublin["estimate"] > leitrim["estimate"]
 
 
 def test_missing_ber_is_allowed(model_client):
-    body = model_client.post(
-        "/v1/valuations", json={**VALID, "ber": None}).json()
+    body = model_client.post("/v1/valuations", json={**VALID, "ber": None}).json()
     assert body["ber_known"] is False
     assert body["estimate"] > 0
