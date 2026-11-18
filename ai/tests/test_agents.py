@@ -65,6 +65,15 @@ def test_hopeless_application_breaches_both_limits():
     assert len(result.breaches) == 2
 
 
+def test_second_time_buyers_have_the_lower_lti_limit():
+    """CBI: 4x income for first-time buyers, 3.5x for everyone else."""
+    first = assess_affordability(80_000, 0, 300_000, 3.9, 30, first_time_buyer=True)
+    mover = assess_affordability(80_000, 0, 300_000, 3.9, 30, first_time_buyer=False)
+    assert first.breaches == []  # 3.75x is within 4x
+    assert any("loan-to-income" in breach for breach in mover.breaches)
+    assert mover.as_dict()["limits"]["lti"] == 3.5
+
+
 def test_ltv_uses_the_lower_of_asking_price_and_estimate():
     """Lending against the higher figure would understate the risk."""
     cheap_estimate = assess_collateral(300_000, 350_000, 300_000)
@@ -107,6 +116,7 @@ def test_healthy_application_reaches_the_strategist():
         "valuation",
         "market",
         "strategist",
+        "risk",
     ]
 
 
@@ -124,7 +134,9 @@ def test_hopeless_application_is_declined_without_an_llm_call():
     assert [step["agent"] for step in final["trail"]] == [
         "affordability",
         "auto_decline",
+        "risk",
     ]
+    assert final["risk"]["tier"] == "High"
 
 
 def test_unparseable_model_output_is_reported_not_raised():
@@ -150,7 +162,7 @@ def test_provider_outage_does_not_crash_the_run():
 def test_missing_provider_still_produces_a_full_trail():
     final = run(HEALTHY, llm=None)
     assert final["decision"]["decision"] == "Unavailable"
-    assert len(final["trail"]) == 4
+    assert len(final["trail"]) == 5
 
 
 # --- voting path (ALG4-85) -------------------------------------------------

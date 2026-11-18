@@ -57,8 +57,10 @@ def test_run_completes_and_returns_the_full_state(client):
 
     assert body["status"] == "done"
     result = body["result"]
-    assert set(result) >= {"affordability", "valuation", "decision", "trail"}
+    assert set(result) >= {"affordability", "valuation", "decision", "risk", "trail"}
     assert result["affordability"]["dti_percent"] > 0
+    assert result["risk"]["tier"] in {"Low", "Medium", "High"}
+    assert 0 <= result["risk"]["approval_chance_percent"] <= 100
     assert len(result["trail"]) >= 2
 
 
@@ -74,6 +76,7 @@ def test_hopeless_application_is_declined(client):
 
     assert result["decision"]["decision"] == "Decline"
     assert result["decision"]["automatic"] is True
+    assert result["risk"]["tier"] == "High"
 
 
 def test_unknown_job_is_404(client):
