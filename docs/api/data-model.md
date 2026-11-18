@@ -318,7 +318,7 @@ final decision.
 | status                 | LoanApplicationStatus       | x   | core    | Current application status: `applied`, `AI deliberated`, `underwriter approved`, `funded`, `closed`              |
 | status_history         | dict[]                      | x   | core    | Application status history; updated on change                                                                    |
 | assessment_id          | str                         | ?   | core    | ID of the latest related document in assesments (see [assessments](#assessments))                                |
-| risk_tier              | RiskTier                    | ?   | ai      |  `low`, `medium`, `high`; derived from the latest assessment for filtering; null until assessed                  |
+| risk_tier              | RiskTier                    | ?   | ai      |  `Low`, `Medium`, `High`; derived from the latest assessment for filtering; null until assessed                  |
 | decision               | dict                        | ?   | client  | Underwriting officer final decision; null until made                                                             |
 | created_at             | datetime                    | x   | core    | Application creation time stamp                                                                                  |
 | updated_at             | datetime                    | x   | core    | Application details modification time stamp                                                                      |
@@ -516,8 +516,10 @@ Decision details of the AI committee, including votes of each model.
 | automatic  | bool       | x   | ai     | `True` only if declined automatically (exceed hard coded limits)                    |
 | votes      | Vote[]     | x   | ai     | Decision of each separate agent, majority wins; empty if `automatic` is `True`      |
 
-> [!WARNING]
-> AL-AI Engine is not yet providing risk_tier for the loan application, but it will be included in the future.
+> [!NOTE]
+> AL-AI Engine provides the risk tier: instantly from `POST /v1/risk-assessments` (no language model, use it on submission)
+> and as `result.risk` of a committee run. `risk.tier` has the same values as `RiskTier`; `risk.approval_chance_percent`
+> is the estimated chance of approval. See [docs/ai/risk-assessment.md](../ai/risk-assessment.md).
 
 ###### votes
 
