@@ -1,8 +1,8 @@
-from typing import Optional, Protocol
+from typing import Protocol
 
 from src.users.models import UserProfileModel
 
 
-class UserProfileRepository(Protocol):
-    async def get_user_profile(self, uid: str) -> Optional[UserProfileModel]: ...
+class UserProfileRepositoryPort(Protocol):
     async def add_user_profile(self, user_model: UserProfileModel) -> None: ...
+    async def get_user_profile(self, uid: str) -> UserProfileModel | None: ...

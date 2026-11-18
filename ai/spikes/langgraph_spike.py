@@ -43,10 +43,10 @@ except ImportError:
 MODEL_PATH = Path(__file__).resolve().parents[1] / "ml" / "models" / "avm_v1.joblib"
 
 # Central Bank of Ireland limits. Config values, not hardcoded rules.
-LTI_LIMIT = 4.0          # loan to income, first-time buyer
-LTV_LIMIT = 90.0         # loan to value, percent
-DTI_LIMIT = 40.0         # debt service to gross income, percent (lender policy)
-STRESS_BPS = 200         # repayments are tested 2% above the offered rate
+LTI_LIMIT = 4.0  # loan to income, first-time buyer
+LTV_LIMIT = 90.0  # loan to value, percent
+DTI_LIMIT = 40.0  # debt service to gross income, percent (lender policy)
+STRESS_BPS = 200  # repayments are tested 2% above the offered rate
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class CreditState(TypedDict, total=False):
     affordability: dict[str, Any]
     valuation: dict[str, Any]
     decision: dict[str, Any]
-    trail: list[str]          # human-readable log for the audit console
+    trail: list[str]  # human-readable log for the audit console
 
 
 # ---------------------------------------------------------------------------
@@ -91,16 +91,22 @@ def affordability_node(state: CreditState) -> CreditState:
     }
     if result["lti_multiple"] > LTI_LIMIT:
         result["breaches"].append(
-            f"LTI {result['lti_multiple']} exceeds limit {LTI_LIMIT}")
+            f"LTI {result['lti_multiple']} exceeds limit {LTI_LIMIT}"
+        )
     if result["dti_percent"] > DTI_LIMIT:
         result["breaches"].append(
-            f"stressed DTI {result['dti_percent']}% exceeds {DTI_LIMIT}%")
+            f"stressed DTI {result['dti_percent']}% exceeds {DTI_LIMIT}%"
+        )
 
-    return {"affordability": result,
-            "trail": state.get("trail", []) + [
-                f"affordability: DTI {result['dti_percent']}%, "
-                f"LTI {result['lti_multiple']}, "
-                f"{len(result['breaches'])} breach(es)"]}
+    return {
+        "affordability": result,
+        "trail": state.get("trail", [])
+        + [
+            f"affordability: DTI {result['dti_percent']}%, "
+            f"LTI {result['lti_multiple']}, "
+            f"{len(result['breaches'])} breach(es)"
+        ],
+    }
 
 
 def valuation_node(state: CreditState) -> CreditState:
@@ -111,9 +117,12 @@ def valuation_node(state: CreditState) -> CreditState:
     if MODEL_PATH.exists():
         import joblib
         import pandas as pd
+
         bundle = joblib.load(MODEL_PATH)
-        row = {f: float("nan") for f in
-               bundle["numeric_features"] + bundle["categorical_features"]}
+        row = {
+            f: float("nan")
+            for f in bundle["numeric_features"] + bundle["categorical_features"]
+        }
         row.update({k: v for k, v in app["property"].items() if k in row})
         row["ber_score"] = bundle["ber_score"].get(app["property"]["ber"])
         row["ber_known"] = int(row["ber_score"] is not None)
@@ -124,7 +133,7 @@ def valuation_node(state: CreditState) -> CreditState:
     asking = app["asking_price"]
     estimate = estimate or asking
     gap = (asking - estimate) / estimate * 100
-    ltv = app["loan"] / min(asking, estimate) * 100   # lend against the lower
+    ltv = app["loan"] / min(asking, estimate) * 100  # lend against the lower
 
     result = {
         "estimate": round(estimate),
@@ -135,10 +144,14 @@ def valuation_node(state: CreditState) -> CreditState:
         "ltv_breach": ltv > LTV_LIMIT,
         "model_version": source,
     }
-    return {"valuation": result,
-            "trail": state.get("trail", []) + [
-                f"valuation: estimate EUR {result['estimate']:,}, "
-                f"gap {result['gap_percent']:+.1f}%, LTV {result['ltv_percent']}%"]}
+    return {
+        "valuation": result,
+        "trail": state.get("trail", [])
+        + [
+            f"valuation: estimate EUR {result['estimate']:,}, "
+            f"gap {result['gap_percent']:+.1f}%, LTV {result['ltv_percent']}%"
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -160,20 +173,28 @@ Return ONLY valid JSON, no markdown:
 def strategist_node(state: CreditState) -> CreditState:
     prompt = STRATEGIST_PROMPT.format(
         affordability=json.dumps(state["affordability"]),
-        valuation=json.dumps(state["valuation"]))
+        valuation=json.dumps(state["valuation"]),
+    )
 
     if call_groq is None:
-        return {"decision": {"decision": "Unavailable",
-                             "reason": "no LLM provider configured"},
-                "trail": state.get("trail", []) + ["strategist: skipped"]}
+        return {
+            "decision": {
+                "decision": "Unavailable",
+                "reason": "no LLM provider configured",
+            },
+            "trail": state.get("trail", []) + ["strategist: skipped"],
+        }
 
     started = time.perf_counter()
     try:
         raw = call_groq(prompt).strip()
     except Exception as exc:
         # A provider outage must not kill the deliberation (see AGT-02)
-        return {"decision": {"decision": "Unavailable", "reason": str(exc)[:200]},
-                "trail": state.get("trail", []) + [f"strategist: failed, {type(exc).__name__}"]}
+        return {
+            "decision": {"decision": "Unavailable", "reason": str(exc)[:200]},
+            "trail": state.get("trail", [])
+            + [f"strategist: failed, {type(exc).__name__}"],
+        }
 
     cleaned = raw.removeprefix("```json").removeprefix("```").removesuffix("```")
     try:
@@ -182,19 +203,24 @@ def strategist_node(state: CreditState) -> CreditState:
         decision = {"decision": "Unparseable", "raw": raw[:300]}
     decision["seconds"] = round(time.perf_counter() - started, 1)
 
-    return {"decision": decision,
-            "trail": state.get("trail", []) + [
-                f"strategist: {decision.get('decision')} "
-                f"({decision['seconds']}s)"]}
+    return {
+        "decision": decision,
+        "trail": state.get("trail", [])
+        + [f"strategist: {decision.get('decision')} ({decision['seconds']}s)"],
+    }
 
 
 def auto_decline_node(state: CreditState) -> CreditState:
     """Hard regulatory breach: no need to ask a model."""
     breaches = state["affordability"]["breaches"]
-    return {"decision": {"decision": "Decline",
-                         "conditions": [],
-                         "reason": "Regulatory limit breached: " + "; ".join(breaches)},
-            "trail": state.get("trail", []) + ["auto-decline: hard limit breached"]}
+    return {
+        "decision": {
+            "decision": "Decline",
+            "conditions": [],
+            "reason": "Regulatory limit breached: " + "; ".join(breaches),
+        },
+        "trail": state.get("trail", []) + ["auto-decline: hard limit breached"],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -213,9 +239,11 @@ def build_graph():
     graph.add_node("auto_decline", auto_decline_node)
 
     graph.set_entry_point("affordability")
-    graph.add_conditional_edges("affordability", route_after_affordability,
-                                {"valuation": "valuation",
-                                 "auto_decline": "auto_decline"})
+    graph.add_conditional_edges(
+        "affordability",
+        route_after_affordability,
+        {"valuation": "valuation", "auto_decline": "auto_decline"},
+    )
     graph.add_edge("valuation", "strategist")
     graph.add_edge("strategist", END)
     graph.add_edge("auto_decline", END)
@@ -240,9 +268,16 @@ def main() -> None:
         "asking_price": args.asking,
         "rate": 3.9,
         "term_years": 30,
-        "property": {"county": "Cork", "floor_area_m2": 110, "bedrooms": 3,
-                     "bathrooms": 2, "property_type": "Semi-D", "ber": "B2",
-                     "latitude": 51.90, "longitude": -8.47},
+        "property": {
+            "county": "Cork",
+            "floor_area_m2": 110,
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "property_type": "Semi-D",
+            "ber": "B2",
+            "latitude": 51.90,
+            "longitude": -8.47,
+        },
     }
 
     app_graph = build_graph()
@@ -255,9 +290,16 @@ def main() -> None:
         print(f"  - {line}")
 
     print("\nState after the run (this is what the audit console would show)")
-    print(json.dumps({k: v for k, v in final.items()
-                      if k in ("affordability", "valuation", "decision")},
-                     indent=2))
+    print(
+        json.dumps(
+            {
+                k: v
+                for k, v in final.items()
+                if k in ("affordability", "valuation", "decision")
+            },
+            indent=2,
+        )
+    )
     print(f"\ntotal {total:.1f}s")
 
 

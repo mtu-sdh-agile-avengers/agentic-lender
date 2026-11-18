@@ -1,0 +1,5 @@
+node_modules
+dist
+# local settings must not leak into the production build
+.env
+.env.*

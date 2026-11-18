@@ -61,20 +61,60 @@ COLUMN_MAP = {
 }
 
 # Property types that are actual homes. "Site" is land, so it is excluded.
-DWELLINGS = ["Detached", "Semi-D", "Terrace", "End of Terrace", "Apartment",
-             "Bungalow", "Townhouse", "Duplex", "Houses", "Studio"]
+DWELLINGS = [
+    "Detached",
+    "Semi-D",
+    "Terrace",
+    "End of Terrace",
+    "Apartment",
+    "Bungalow",
+    "Townhouse",
+    "Duplex",
+    "Houses",
+    "Studio",
+]
 
 # Northern Ireland: different country, different currency
-NORTHERN_IRELAND = ["Antrim", "Armagh", "Derry", "Londonderry", "Down",
-                    "Fermanagh", "Tyrone"]
+NORTHERN_IRELAND = [
+    "Antrim",
+    "Armagh",
+    "Derry",
+    "Londonderry",
+    "Down",
+    "Fermanagh",
+    "Tyrone",
+]
 
 # BER letters to a score: A1 = 15 (most efficient) ... G = 1 (least)
-BER_GRADES = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3",
-              "D1", "D2", "E1", "E2", "F", "G"]
+BER_GRADES = [
+    "A1",
+    "A2",
+    "A3",
+    "B1",
+    "B2",
+    "B3",
+    "C1",
+    "C2",
+    "C3",
+    "D1",
+    "D2",
+    "E1",
+    "E2",
+    "F",
+    "G",
+]
 BER_SCORE = {grade: len(BER_GRADES) - i for i, grade in enumerate(BER_GRADES)}
 
-NUMERIC_FEATURES = ["floor_area_m2", "bedrooms", "bathrooms", "ber_score",
-                    "ber_known", "area_known", "latitude", "longitude"]
+NUMERIC_FEATURES = [
+    "floor_area_m2",
+    "bedrooms",
+    "bathrooms",
+    "ber_score",
+    "ber_known",
+    "area_known",
+    "latitude",
+    "longitude",
+]
 CATEGORICAL_FEATURES = ["county", "property_type"]
 TARGET = "price"
 
@@ -108,8 +148,8 @@ def clean_data(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     # "499000" and "Price on Application" live in the same text column.
     # to_numeric turns the words into NaN, which we then drop.
     df["price"] = pd.to_numeric(
-        df["price"].astype(str).str.replace(r"[^\d.]", "", regex=True),
-        errors="coerce")
+        df["price"].astype(str).str.replace(r"[^\d.]", "", regex=True), errors="coerce"
+    )
     df = log.step("drop non-numeric price", df.dropna(subset=["price"]))
 
     for col in ["bedrooms", "bathrooms", "floor_area_m2", "latitude", "longitude"]:
@@ -118,13 +158,13 @@ def clean_data(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     df["county"] = df["county"].astype(str).str.strip().str.title()
     df["property_type"] = df["property_type"].astype(str).str.strip()
 
-    df = log.step("keep dwellings only",
-                  df[df["property_type"].isin(DWELLINGS)])
-    df = log.step("drop Northern Ireland",
-                  df[~df["county"].isin(NORTHERN_IRELAND)])
+    df = log.step("keep dwellings only", df[df["property_type"].isin(DWELLINGS)])
+    df = log.step("drop Northern Ireland", df[~df["county"].isin(NORTHERN_IRELAND)])
     df = log.step("bedrooms > 0", df[df["bedrooms"] > 0])
-    df = log.step(f"price {MIN_PRICE:,}-{MAX_PRICE:,}",
-                  df[df["price"].between(MIN_PRICE, MAX_PRICE)])
+    df = log.step(
+        f"price {MIN_PRICE:,}-{MAX_PRICE:,}",
+        df[df["price"].between(MIN_PRICE, MAX_PRICE)],
+    )
 
     # Floor area is 19% missing. Rather than lose those rows, blank out the
     # impossible values and let the pipeline fill gaps with the median.
@@ -138,10 +178,14 @@ def clean_data(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     df["ber_score"] = df["ber"].map(BER_SCORE)
     df["ber_known"] = (~df["ber_score"].isna()).astype(int)
 
-    df = log.step("drop rows with no location",
-                  df.dropna(subset=["county", "latitude", "longitude"]))
-    df = log.step("drop duplicate listings",
-                  df.drop_duplicates(subset=["latitude", "longitude", "price"]))
+    df = log.step(
+        "drop rows with no location",
+        df.dropna(subset=["county", "latitude", "longitude"]),
+    )
+    df = log.step(
+        "drop duplicate listings",
+        df.drop_duplicates(subset=["latitude", "longitude", "price"]),
+    )
 
     return df.reset_index(drop=True), log.to_frame()
 
@@ -157,50 +201,74 @@ def make_preprocessor(scale_free: bool = True) -> ColumnTransformer:
     """
     numeric = Pipeline([("impute", SimpleImputer(strategy="median"))])
     categorical = OneHotEncoder(
-        drop="first" if scale_free else None, handle_unknown="ignore",
-        sparse_output=False)
-    return ColumnTransformer([
-        ("num", numeric, NUMERIC_FEATURES),
-        ("cat", categorical, CATEGORICAL_FEATURES),
-    ])
+        drop="first" if scale_free else None,
+        handle_unknown="ignore",
+        sparse_output=False,
+    )
+    return ColumnTransformer(
+        [
+            ("num", numeric, NUMERIC_FEATURES),
+            ("cat", categorical, CATEGORICAL_FEATURES),
+        ]
+    )
 
 
 def build_models(quick: bool = False) -> dict:
-    linear = Pipeline([
-        ("prep", make_preprocessor()),
-        ("reg", LinearRegression()),
-    ])
+    linear = Pipeline(
+        [
+            ("prep", make_preprocessor()),
+            ("reg", LinearRegression()),
+        ]
+    )
 
     # Same model, but learns log(price). House prices are skewed and effects
     # are multiplicative ("Dublin is +40%"), which suits a log scale.
     linear_log = TransformedTargetRegressor(
-        regressor=Pipeline([
-            ("prep", make_preprocessor()),
-            ("reg", LinearRegression()),
-        ]),
-        func=np.log, inverse_func=np.exp)
+        regressor=Pipeline(
+            [
+                ("prep", make_preprocessor()),
+                ("reg", LinearRegression()),
+            ]
+        ),
+        func=np.log,
+        inverse_func=np.exp,
+    )
 
     # Random Forest: many decision trees averaged together. It finds
     # non-linear patterns a straight line cannot, e.g. that latitude matters
     # differently inside Dublin than in the west.
-    forest = Pipeline([
-        ("prep", make_preprocessor(scale_free=False)),
-        ("reg", RandomForestRegressor(
-            n_estimators=100 if quick else 300,
-            min_samples_leaf=2,
-            n_jobs=-1,
-            random_state=RANDOM_STATE)),
-    ])
+    forest = Pipeline(
+        [
+            ("prep", make_preprocessor(scale_free=False)),
+            (
+                "reg",
+                RandomForestRegressor(
+                    n_estimators=100 if quick else 300,
+                    min_samples_leaf=2,
+                    n_jobs=-1,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
 
     boosted_log = TransformedTargetRegressor(
-        regressor=Pipeline([
-            ("prep", make_preprocessor(scale_free=False)),
-            ("reg", HistGradientBoostingRegressor(random_state=RANDOM_STATE)),
-        ]),
-        func=np.log, inverse_func=np.exp)
+        regressor=Pipeline(
+            [
+                ("prep", make_preprocessor(scale_free=False)),
+                ("reg", HistGradientBoostingRegressor(random_state=RANDOM_STATE)),
+            ]
+        ),
+        func=np.log,
+        inverse_func=np.exp,
+    )
 
-    return {"linear": linear, "linear_log_price": linear_log,
-            "random_forest": forest, "hist_gb_log": boosted_log}
+    return {
+        "linear": linear,
+        "linear_log_price": linear_log,
+        "random_forest": forest,
+        "hist_gb_log": boosted_log,
+    }
 
 
 def evaluate(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
@@ -217,11 +285,14 @@ def show_importances(forest: Pipeline, top_n: int = 12) -> pd.DataFrame:
     """Which features the forest actually relies on."""
     names = forest.named_steps["prep"].get_feature_names_out()
     importances = forest.named_steps["reg"].feature_importances_
-    frame = (pd.DataFrame({"feature": [n.split("__", 1)[1] for n in names],
-                           "importance": importances})
-             .sort_values("importance", ascending=False)
-             .head(top_n)
-             .reset_index(drop=True))
+    frame = (
+        pd.DataFrame(
+            {"feature": [n.split("__", 1)[1] for n in names], "importance": importances}
+        )
+        .sort_values("importance", ascending=False)
+        .head(top_n)
+        .reset_index(drop=True)
+    )
     frame["importance"] = frame["importance"].round(4)
     return frame
 
@@ -236,8 +307,13 @@ def value_property(bundle: dict, asking_price: float, **features) -> None:
 
     estimate = float(bundle["model"].predict(pd.DataFrame([row]))[0])
     gap = (asking_price - estimate) / estimate * 100
-    verdict = ("OVERVALUED, flag for review" if gap > 10
-               else "below estimate" if gap < -10 else "within fair range")
+    verdict = (
+        "OVERVALUED, flag for review"
+        if gap > 10
+        else "below estimate"
+        if gap < -10
+        else "within fair range"
+    )
 
     print("\nExample valuation")
     print(f"  Estimate:     EUR {estimate:,.0f}")
@@ -249,8 +325,9 @@ def value_property(bundle: dict, asking_price: float, **features) -> None:
 # ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--quick", action="store_true",
-                        help="smaller forest, faster run")
+    parser.add_argument(
+        "--quick", action="store_true", help="smaller forest, faster run"
+    )
     args = parser.parse_args()
 
     if not DATA_PATH.exists():
@@ -263,13 +340,16 @@ def main() -> None:
     print(cleaning_log.to_string(index=False))
     print(f"\nUsable rows: {len(df):,}")
     print(f"Median price: EUR {df[TARGET].median():,.0f}")
-    print(f"Floor area known: {df['area_known'].mean():.0%}   "
-          f"BER known: {df['ber_known'].mean():.0%}")
+    print(
+        f"Floor area known: {df['area_known'].mean():.0%}   "
+        f"BER known: {df['ber_known'].mean():.0%}"
+    )
 
     X = df[NUMERIC_FEATURES + CATEGORICAL_FEATURES]
     y = df[TARGET]
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=RANDOM_STATE)
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
     print(f"Train rows: {len(X_train):,}   Test rows: {len(X_test):,}")
 
     results = {}
@@ -280,7 +360,8 @@ def main() -> None:
         results[name] = evaluate(model, X_test, y_test)
 
     scores = pd.DataFrame(results).T.round(
-        {"MAE_eur": 0, "RMSE_eur": 0, "MAPE_pct": 1, "R2": 3})
+        {"MAE_eur": 0, "RMSE_eur": 0, "MAPE_pct": 1, "R2": 3}
+    )
     print("\nResults on the held-out test set")
     print(scores.to_string())
 
@@ -301,25 +382,49 @@ def main() -> None:
         "metrics": results[best_name],
         "trained_rows": len(X_train),
     }
-    value_property(bundle, asking_price=450_000, county="Cork",
-                   floor_area_m2=110, bedrooms=3, bathrooms=2,
-                   property_type="Semi-D", ber="B2",
-                   latitude=51.90, longitude=-8.47)
+    value_property(
+        bundle,
+        asking_price=450_000,
+        county="Cork",
+        floor_area_m2=110,
+        bedrooms=3,
+        bathrooms=2,
+        property_type="Semi-D",
+        ber="B2",
+        latitude=51.90,
+        longitude=-8.47,
+    )
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, MODEL_PATH)
     df.to_csv(CLEAN_PATH, index=False)
 
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text("\n".join([
-        "# AVM model results", "",
-        f"Trained on {len(X_train):,} rows, tested on {len(X_test):,}.", "",
-        "## Cleaning", "", cleaning_log.to_string(index=False), "",
-        "## Metrics", "", scores.to_string(), "",
-        f"Chosen model: **{best_name}**", "",
-        "## Feature importance (Random Forest)", "",
-        importances.to_string(index=False), "",
-    ]), encoding="utf-8")
+    REPORT_PATH.write_text(
+        "\n".join(
+            [
+                "# AVM model results",
+                "",
+                f"Trained on {len(X_train):,} rows, tested on {len(X_test):,}.",
+                "",
+                "## Cleaning",
+                "",
+                cleaning_log.to_string(index=False),
+                "",
+                "## Metrics",
+                "",
+                scores.to_string(),
+                "",
+                f"Chosen model: **{best_name}**",
+                "",
+                "## Feature importance (Random Forest)",
+                "",
+                importances.to_string(index=False),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     print(f"\nSaved model to {MODEL_PATH}")
     print(f"Saved metrics to {REPORT_PATH}")

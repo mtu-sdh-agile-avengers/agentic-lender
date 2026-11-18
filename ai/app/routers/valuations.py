@@ -23,10 +23,12 @@ async def list_counties() -> list[str]:
     return known_counties()
 
 
-@router.post("/valuations", response_model=ValuationResponse,
-             status_code=status.HTTP_200_OK)
-async def create_valuation(request: ValuationRequest,
-                           http_request: Request) -> ValuationResponse:
+@router.post(
+    "/valuations", response_model=ValuationResponse, status_code=status.HTTP_200_OK
+)
+async def create_valuation(
+    request: ValuationRequest, http_request: Request
+) -> ValuationResponse:
     """Estimate the market asking value of a property.
 
     Unknown counties are rejected rather than guessed: the model would still
@@ -39,12 +41,17 @@ async def create_valuation(request: ValuationRequest,
         raise HTTPException(
             status_code=422,
             detail=f"unknown county '{request.county}'. "
-                   f"Known counties: {', '.join(known_counties())}",
+            f"Known counties: {', '.join(known_counties())}",
         )
 
     bundle = get_model(http_request)
     response = value_property(request, bundle)
-    logger.info("valuation %s %s %sm2 -> EUR %s (%s)",
-                request.county, request.property_type, request.floor_area_m2,
-                response.estimate, response.model_version)
+    logger.info(
+        "valuation %s %s %sm2 -> EUR %s (%s)",
+        request.county,
+        request.property_type,
+        request.floor_area_m2,
+        response.estimate,
+        response.model_version,
+    )
     return response

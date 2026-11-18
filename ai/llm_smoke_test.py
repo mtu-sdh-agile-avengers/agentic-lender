@@ -31,6 +31,7 @@ import requests
 # Optional: load keys from a .env file if python-dotenv is installed
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -40,10 +41,14 @@ TIMEOUT = 60
 # Model names change often. Override with env vars instead of editing code.
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 # Gemini free tier gets busy, so we try several models in order until one works
-GEMINI_MODELS = [m.strip() for m in os.getenv(
-    "GEMINI_MODELS",
-    "gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite"
-).split(",") if m.strip()]
+GEMINI_MODELS = [
+    m.strip()
+    for m in os.getenv(
+        "GEMINI_MODELS",
+        "gemini-3.5-flash,gemini-3.5-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite",
+    ).split(",")
+    if m.strip()
+]
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
@@ -77,9 +82,11 @@ def post_with_retry(url: str, **kwargs) -> requests.Response:
             return response
         last = response
         if attempt < ATTEMPTS:
-            wait = 2 ** attempt           # 2s, then 4s
-            print(f"    retry {attempt}/{ATTEMPTS - 1} after HTTP "
-                  f"{response.status_code}, waiting {wait}s")
+            wait = 2**attempt  # 2s, then 4s
+            print(
+                f"    retry {attempt}/{ATTEMPTS - 1} after HTTP "
+                f"{response.status_code}, waiting {wait}s"
+            )
             time.sleep(wait)
     last.raise_for_status()
     return last
@@ -190,23 +197,36 @@ def ask(name: str, func, prompt: str) -> dict:
     started = time.perf_counter()
     try:
         answer = func(prompt)
-        return {"name": name, "ok": True, "answer": answer.strip(),
-                "seconds": time.perf_counter() - started}
+        return {
+            "name": name,
+            "ok": True,
+            "answer": answer.strip(),
+            "seconds": time.perf_counter() - started,
+        }
     except requests.HTTPError as exc:
         # The response body usually says exactly what is wrong
         detail = exc.response.text[:300] if exc.response is not None else str(exc)
-        return {"name": name, "ok": False, "error": f"HTTP {exc.response.status_code}: {detail}",
-                "seconds": time.perf_counter() - started}
+        return {
+            "name": name,
+            "ok": False,
+            "error": f"HTTP {exc.response.status_code}: {detail}",
+            "seconds": time.perf_counter() - started,
+        }
     except Exception as exc:
-        return {"name": name, "ok": False, "error": f"{type(exc).__name__}: {exc}",
-                "seconds": time.perf_counter() - started}
+        return {
+            "name": name,
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "seconds": time.perf_counter() - started,
+        }
 
 
 def ask_all(prompt: str) -> list:
     """All three at once, so total time is the slowest one, not the sum."""
     with ThreadPoolExecutor(max_workers=len(PROVIDERS)) as pool:
-        futures = [pool.submit(ask, name, func, prompt)
-                   for name, func in PROVIDERS.items()]
+        futures = [
+            pool.submit(ask, name, func, prompt) for name, func in PROVIDERS.items()
+        ]
         return [f.result() for f in futures]
 
 
@@ -219,18 +239,24 @@ def check_setup() -> None:
     try:
         tags = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5).json()
         models = [m["name"] for m in tags.get("models", [])]
-        print(f"  ollama           running, models: {', '.join(models) or 'none pulled'}")
+        print(
+            f"  ollama           running, models: {', '.join(models) or 'none pulled'}"
+        )
     except Exception as exc:
-        print(f"  ollama           not reachable at {OLLAMA_URL} ({type(exc).__name__})")
+        print(
+            f"  ollama           not reachable at {OLLAMA_URL} ({type(exc).__name__})"
+        )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--prompt", default=None, help="your own prompt")
-    parser.add_argument("--json", action="store_true",
-                        help="ask for strict JSON and check it parses")
-    parser.add_argument("--check", action="store_true",
-                        help="only verify keys and Ollama, send nothing")
+    parser.add_argument(
+        "--json", action="store_true", help="ask for strict JSON and check it parses"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="only verify keys and Ollama, send nothing"
+    )
     args = parser.parse_args()
 
     check_setup()
@@ -255,8 +281,14 @@ def main() -> None:
         print(result["answer"][:1200])
         if args.json:
             # Models often wrap JSON in ```json fences, so strip them first
-            cleaned = result["answer"].strip().removeprefix("```json") \
-                .removeprefix("```").removesuffix("```").strip()
+            cleaned = (
+                result["answer"]
+                .strip()
+                .removeprefix("```json")
+                .removeprefix("```")
+                .removesuffix("```")
+                .strip()
+            )
             try:
                 parsed = json.loads(cleaned)
                 print(f"\n  -> valid JSON, keys: {list(parsed)}")
@@ -265,8 +297,10 @@ def main() -> None:
         print()
 
     working = sum(r["ok"] for r in results)
-    print(f"Summary: {working}/{len(results)} providers responded, "
-          f"{total:.1f}s wall clock (slowest provider decides)")
+    print(
+        f"Summary: {working}/{len(results)} providers responded, "
+        f"{total:.1f}s wall clock (slowest provider decides)"
+    )
 
 
 if __name__ == "__main__":

@@ -8,16 +8,17 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "dotenv>=0.9.9",
-    "fastapi[standard]>=0.141.1",
-    "firebase-admin>=7.7.0",
-    "gunicorn>=26.2.0",
+    "fastapi[standard]==0.163.0",
+    "firebase-admin==7.8.0",
+    "gunicorn==27.0.1",
     "uvicorn>=0.54.0",
-    "loguru>=0.7.3",
-    "pytest>=9.1.1",
-    "python-dotenv>=1.2.3",
+    "loguru==0.8.0",
+    "pytest==9.2.0",
+    "python-dotenv==1.2.4",
     "slowapi>=0.1.10",
-    "ruff>=0.17.0",
+    "ruff==0.17.5",
     "requests>=2.34.2",
+    "pydantic-settings==2.16.3",
 ]
 
 # fastapi configureation

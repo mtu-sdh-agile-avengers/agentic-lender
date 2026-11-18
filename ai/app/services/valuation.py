@@ -17,7 +17,9 @@ from app.schemas import (
     ValuationResponse,
 )
 
-CENTROIDS_PATH = Path(__file__).resolve().parent.parent / "data" / "county_centroids.json"
+CENTROIDS_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "county_centroids.json"
+)
 
 # A property is flagged when the asking price exceeds the estimate by this much
 OVERVALUED_THRESHOLD_PCT = 10.0
@@ -41,7 +43,9 @@ def known_counties() -> list[str]:
     return sorted(county_centroids())
 
 
-def build_feature_row(request: ValuationRequest, bundle: dict) -> tuple[pd.DataFrame, str]:
+def build_feature_row(
+    request: ValuationRequest, bundle: dict
+) -> tuple[pd.DataFrame, str]:
     """Turn the API request into the exact columns the pipeline expects."""
     centroids = county_centroids()
     if request.latitude is not None:
@@ -52,20 +56,24 @@ def build_feature_row(request: ValuationRequest, bundle: dict) -> tuple[pd.DataF
 
     ber_score = bundle["ber_score"].get(request.ber) if request.ber else None
 
-    row = {name: float("nan") for name in
-           bundle["numeric_features"] + bundle["categorical_features"]}
-    row.update({
-        "county": request.county,
-        "property_type": request.property_type,
-        "floor_area_m2": request.floor_area_m2,
-        "bedrooms": request.bedrooms,
-        "bathrooms": request.bathrooms,
-        "latitude": latitude,
-        "longitude": longitude,
-        "ber_score": ber_score if ber_score is not None else float("nan"),
-        "ber_known": int(ber_score is not None),
-        "area_known": 1,
-    })
+    row = {
+        name: float("nan")
+        for name in bundle["numeric_features"] + bundle["categorical_features"]
+    }
+    row.update(
+        {
+            "county": request.county,
+            "property_type": request.property_type,
+            "floor_area_m2": request.floor_area_m2,
+            "bedrooms": request.bedrooms,
+            "bathrooms": request.bathrooms,
+            "latitude": latitude,
+            "longitude": longitude,
+            "ber_score": ber_score if ber_score is not None else float("nan"),
+            "ber_known": int(ber_score is not None),
+            "area_known": 1,
+        }
+    )
     return pd.DataFrame([row]), source
 
 
@@ -101,6 +109,9 @@ def value_property(request: ValuationRequest, bundle: dict) -> ValuationResponse
         model_version=bundle.get("version", "unknown"),
         coordinates_source=coordinates_source,
         ber_known=request.ber is not None,
-        comparison=(compare_asking_price(estimate, request.asking_price)
-                    if request.asking_price else None),
+        comparison=(
+            compare_asking_price(estimate, request.asking_price)
+            if request.asking_price
+            else None
+        ),
     )

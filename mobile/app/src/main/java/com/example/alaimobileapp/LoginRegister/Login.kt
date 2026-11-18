@@ -101,7 +101,7 @@ fun Login(navController: NavHostController, viewModel: AuthViewModel = viewModel
         }
 
         Text(
-            "Demo account: demo@alai.ie / Password1",
+            "Demo account: borrower@demo.agenticlender.ie / Password1",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

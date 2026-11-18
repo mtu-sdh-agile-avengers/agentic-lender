@@ -15,10 +15,9 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
-from src.auth.models import CurrentUserModel
-from src.auth.enums import Role, SignInProvider
+from src.auth.enums import UserRole, SignInProvider
 from src.auth.exceptions import ForbiddenError, UnauthorizedError
-
+from src.auth.models import CurrentUserModel
 
 bearer_token = HTTPBearer(auto_error=False)
 
@@ -58,23 +57,21 @@ def get_current_user(
     """
     return CurrentUserModel(
         uid=decoded_token["uid"],
-        
         email=decoded_token["email"],
         email_verified=decoded_token.get("email_verified", False),
         photo_url=decoded_token.get("photo_url", None),
-        
         sign_in_provider=SignInProvider.parse(
             decoded_token.get("firebase", {}).get("sign_in_provider")
         ),
-        
-        role=Role.parse(decoded_token.get("role"))
+        role=UserRole.parse(decoded_token.get("role")),
     )
-    
+
+
 CurrentUserDep = Annotated[CurrentUserModel, Depends(get_current_user)]
 
 
 def require_roles(
-    *allowed_roles: Role,
+    *allowed_roles: UserRole,
 ) -> Callable[[CurrentUserModel], CurrentUserModel]:
     """Checks if the user have the permission to access protected route.
 
@@ -99,3 +96,19 @@ def require_roles(
         return current_user
 
     return role_checker
+
+
+AnyRoleDep = Annotated[
+    CurrentUserDep,
+    Depends(require_roles(UserRole.BORROWER, UserRole.BROKER, UserRole.BANK_OFFICER)),
+]
+
+BorrowerDep = Annotated[CurrentUserDep, Depends(require_roles(UserRole.BORROWER))]
+BrokerDep = Annotated[CurrentUserDep, Depends(require_roles(UserRole.BROKER))]
+BankOfficerDep = Annotated[
+    CurrentUserDep, Depends(require_roles(UserRole.BANK_OFFICER))
+]
+
+BrokerOrBankOfficerDep = Annotated[
+    CurrentUserDep, Depends(require_roles(UserRole.BROKER, UserRole.BANK_OFFICER))
+]

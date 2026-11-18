@@ -2,7 +2,8 @@ package com.example.alaimobileapp.Data
 
 import kotlin.math.pow
 
-data class AppUser(val uid: String, val name: String, val email: String)
+/** Signed-in user. Comes from AL-Core (GET /api/v1/users/me); role is e.g. "retail_borrower". */
+data class AppUser(val uid: String, val name: String, val email: String, val role: String? = null)
 
 enum class PaymentKind(val title: String, val description: String, val amountEur: Double) {
     VERIFICATION_FEE(
