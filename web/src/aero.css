@@ -315,3 +315,10 @@ html[data-reduce-motion="true"], html[data-reduce-motion="true"] *, html[data-re
 
 /* Pipeline pagination */
 .pipeline-pages { justify-content: flex-end; align-items: center; margin-top: 16px; }
+
+/* Loan File */
+.loan-header { flex-wrap: wrap; }
+.loan-header-actions { margin-left: auto; }
+.empty .settings-action-buttons { justify-content: center; }
+.status-history li { grid-template-columns: 175px 170px 1fr; }
+.status-history li::before { left: 160px; }
