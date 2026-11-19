@@ -312,3 +312,6 @@ html[data-reduce-motion="true"], html[data-reduce-motion="true"] *, html[data-re
         background-image: linear-gradient(90deg, rgba(246, 251, 242, .98), rgba(239, 248, 232, .85)), url('/images/fresh-foliage.jpg');
     }
 }
+
+/* Pipeline pagination */
+.pipeline-pages { justify-content: flex-end; align-items: center; margin-top: 16px; }

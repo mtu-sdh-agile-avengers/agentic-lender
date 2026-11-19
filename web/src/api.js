@@ -38,6 +38,38 @@ export function getMyProfile() {
   return apiRequest('/api/v1/users/me');
 }
 
+// GET /api/v1/loan-applications: the caller's applications, newest first, paginated.
+// AL-Core limits the list by role: a broker sees applications they claimed (or, with
+// unclaimedOnly, the shared pool nobody has claimed yet); an underwriter sees the ones
+// assigned to them. Filters left empty are not sent.
+export function listLoanApplications({page = 1, pageSize = 15, unclaimedOnly = false, status, riskTier, ltvGroup} = {}) {
+  const params = new URLSearchParams({page: String(page), pageSize: String(pageSize)});
+  if (unclaimedOnly) params.set('unclaimedOnly', 'true');
+  if (status) params.set('status', status);
+  if (riskTier) params.set('riskTier', riskTier);
+  if (ltvGroup) params.set('ltvGroup', ltvGroup);
+  return apiRequest(`/api/v1/loan-applications?${params}`);
+}
+
+export const LOAN_STATUSES = ['Applied', 'AI Deliberated', 'Underwriter Approved', 'Funded', 'Closed'];
+export const RISK_TIERS = ['Low', 'Medium', 'High'];
+export const LTV_GROUPS = {
+  up_to_60: 'Up to 60%',
+  from_60_to_80: '60–80%',
+  from_80_to_90: '80–90%',
+  over_90: 'Over 90%',
+};
+
+export function loanListErrorMessage(error) {
+  switch (error?.status) {
+    case 0: return error.message;
+    case 401: return 'Your session could not be verified. Please sign in again.';
+    case 403: return 'Your account does not have access to loan applications.';
+    case 429: return 'Too many requests. Please wait a moment and try again.';
+    default: return 'Loan applications could not be loaded. Please try again.';
+  }
+}
+
 export const ROLE_LABELS = {
   retail_borrower: 'Borrower',
   mortgage_broker: 'Mortgage Broker',

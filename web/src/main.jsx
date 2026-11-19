@@ -13,7 +13,7 @@ import './aero.css';
 import {authConfigurationError} from './firebase.js';
 import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
 import {authErrorMessage} from './authErrors.js';
-import {getMyProfile, profileErrorMessage, roleLabel} from './api.js';
+import {getMyProfile, profileErrorMessage, roleLabel, listLoanApplications, loanListErrorMessage, LOAN_STATUSES, RISK_TIERS, LTV_GROUPS} from './api.js';
 
 
 
@@ -121,7 +121,7 @@ function App(){
         {logoutError&&<p className="auth-error" role="alert">Could not sign out. {logoutError}</p>}
         {profile.error&&<p className="auth-error" role="alert">{profile.error}</p>}
         {page==='dashboard' && <Dashboard setPage={setPage}/>} 
-        {page==='pipeline' && <Pipeline setPage={setPage}/>} 
+        {page==='pipeline' && <Pipeline setPage={setPage} role={profile.data?.role}/>}
         {page==='loan' && <LoanFile setPage={setPage}/>} 
         {page==='audit' && <Audit/>}
         {page==='stress' && <Stress scenario={scenario} setScenario={setScenario}/>} 
@@ -239,12 +239,71 @@ function Dashboard({setPage}){
   </>
 }
 
-function Pipeline({setPage}){
+// Real loan applications from AL-Core (GET /api/v1/loan-applications).
+const PIPELINE_PAGE_SIZE=15;
+const riskPillClass=tier=>tier?`pill ${tier.toLowerCase()}`:'pill neutral';
+const formatPercent=fraction=>`${Math.round(fraction*100)}%`;
+const formatDate=iso=>new Intl.DateTimeFormat('en-IE',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(iso));
+
+function Pipeline({setPage,role}){
+  const isBroker=role==='mortgage_broker';
+  const [view,setView]=useState('mine');
+  const [filters,setFilters]=useState({status:'',riskTier:'',ltvGroup:''});
+  const [pageNumber,setPageNumber]=useState(1);
+  const [reloadKey,setReloadKey]=useState(0);
+  const [result,setResult]=useState({loading:true,error:'',data:null});
+  const unclaimedOnly=isBroker&&view==='unclaimed';
+
+  useEffect(()=>{
+    let cancelled=false;
+    setResult(current=>({...current,loading:true,error:''}));
+    listLoanApplications({page:pageNumber,pageSize:PIPELINE_PAGE_SIZE,unclaimedOnly,...filters})
+      .then(data=>{if(!cancelled) setResult({loading:false,error:'',data});})
+      .catch(error=>{if(!cancelled) setResult({loading:false,error:loanListErrorMessage(error),data:null});});
+    return ()=>{cancelled=true;};
+  },[pageNumber,unclaimedOnly,filters,reloadKey]);
+
+  function changeFilter(key,value){setFilters(current=>({...current,[key]:value}));setPageNumber(1);}
+  function changeView(next){setView(next);setPageNumber(1);}
+  const rows=result.data?.items||[];
+  const filtered=Object.values(filters).some(Boolean);
+  const emptyMessage=filtered?'No applications match these filters.'
+    :unclaimedOnly?'There are no unclaimed applications right now.'
+    :isBroker?'You have not claimed any applications yet. Check the unclaimed applications.'
+    :'No applications are assigned to you yet.';
+
   return <>
-    <Hero eyebrow="Pipeline" title="Origination Pipeline" subtitle="Review, filter, and progress mortgage and HELOC applications." compact/>
+    <Hero eyebrow="Pipeline" title="Origination Pipeline" subtitle="Review, filter, and progress mortgage applications." compact/>
     <Card>
-      <div className="toolbar"><div className="search small"><Search size={17}/><input placeholder="Search applications..."/></div><select><option>Status</option><option>Applied</option><option>Under Review</option></select><select><option>Risk</option><option>Low</option><option>Medium</option><option>High</option></select><button className="primary">New application</button></div>
-      <div className="table-wrap"><table><thead><tr><th>ID</th><th>Borrower</th><th>Property</th><th>Amount</th><th>LTV</th><th>Risk</th><th>Status</th></tr></thead><tbody>{applicationRows.map(r=><tr key={r.id} tabIndex="0" onClick={()=>setPage('loan')}><td>{r.id}</td><td>{r.borrower}</td><td>{r.property}</td><td>{r.amount}</td><td>{r.ltv}</td><td><span className={`pill ${r.risk.toLowerCase()}`}>{r.risk}</span></td><td><span className="pill neutral">{r.status}</span></td></tr>)}</tbody></table></div>
+      <div className="toolbar sample-toolbar">
+        {isBroker&&<div className="sample-segments" role="group" aria-label="Which applications">
+          {[['mine','My applications'],['unclaimed','Unclaimed']].map(([value,label])=><button key={value} aria-pressed={view===value} onClick={()=>changeView(value)}>{label}</button>)}
+        </div>}
+        <select aria-label="Status" value={filters.status} onChange={e=>changeFilter('status',e.target.value)}><option value="">All statuses</option>{LOAN_STATUSES.map(s=><option key={s}>{s}</option>)}</select>
+        <select aria-label="Risk" value={filters.riskTier} onChange={e=>changeFilter('riskTier',e.target.value)}><option value="">All risk tiers</option>{RISK_TIERS.map(r=><option key={r}>{r}</option>)}</select>
+        <select aria-label="LTV" value={filters.ltvGroup} onChange={e=>changeFilter('ltvGroup',e.target.value)}><option value="">All LTV</option>{Object.entries(LTV_GROUPS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+        <span className="sample-count" aria-live="polite">{result.data?`${result.data.total} application${result.data.total===1?'':'s'}`:''}</span>
+      </div>
+      {result.error
+        ?<div className="empty" role="alert"><p>{result.error}</p><button className="secondary" onClick={()=>setReloadKey(key=>key+1)}><RotateCcw size={16}/>Try again</button></div>
+        :<div className="table-wrap" aria-busy={result.loading}><table><thead><tr><th>Application</th><th>Borrower</th><th>Property</th><th>Loan amount</th><th>LTV</th><th>Risk</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
+          {rows.map(r=><tr key={r.loanApplicationId} tabIndex="0" onClick={()=>setPage('loan')}>
+            <td title={r.loanApplicationId}>{r.loanApplicationId.slice(0,8)}</td>
+            <td>{r.borrowerFullName||'Unknown borrower'}</td>
+            <td>{r.propertySpec.county}<small className="sample-table-subtext">{r.propertySpec.propertyType}</small></td>
+            <td>{euro(r.loanAmount)}</td>
+            <td>{formatPercent(r.ltv)}</td>
+            <td><span className={riskPillClass(r.riskTier)}>{r.riskTier||'Not assessed'}</span></td>
+            <td><span className="pill neutral">{r.status}</span></td>
+            <td>{formatDate(r.createdAt)}</td>
+          </tr>)}
+          {!rows.length&&<tr><td colSpan={8} className="empty">{result.loading?'Loading applications...':emptyMessage}</td></tr>}
+        </tbody></table></div>}
+      {result.data?.totalPages>1&&<div className="settings-action-buttons pipeline-pages">
+        <button className="secondary" disabled={!result.data.hasPrevious||result.loading} onClick={()=>setPageNumber(n=>n-1)}>Previous</button>
+        <span className="sample-count">Page {result.data.page} of {result.data.totalPages}</span>
+        <button className="secondary" disabled={!result.data.hasNext||result.loading} onClick={()=>setPageNumber(n=>n+1)}>Next</button>
+      </div>}
     </Card>
   </>
 }
