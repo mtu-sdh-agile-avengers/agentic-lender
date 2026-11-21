@@ -4,7 +4,7 @@ import {
   Home, FileText, Users, BarChart3, Settings, LogOut, Search, Bell,
   Leaf, ChevronRight, CheckCircle2, AlertTriangle, CircleDollarSign,
   Building2, ShieldCheck, BrainCircuit, TrendingUp, Download, Link2,
-  Play, UserRoundCheck, Gauge, LineChart, Menu, X, Clock3, ArrowRight,
+  Play, UserRoundCheck, Gauge, LineChart, Menu, X, Clock3, ArrowRight, ArrowLeft,
   CircleCheckBig, CircleX, ClipboardCheck, Sparkles, Landmark, WalletCards,
   Save, RotateCcw
 } from 'lucide-react';
@@ -13,7 +13,7 @@ import './aero.css';
 import {authConfigurationError} from './firebase.js';
 import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
 import {authErrorMessage} from './authErrors.js';
-import {getMyProfile, profileErrorMessage, roleLabel} from './api.js';
+import {getMyProfile, profileErrorMessage, roleLabel, listLoanApplications, getLoanApplication, loanErrorMessage, LOAN_STATUSES, RISK_TIERS, LTV_GROUPS} from './api.js';
 
 
 
@@ -54,6 +54,9 @@ function App(){
   const [mobileOpen,setMobileOpen] = useState(false);
   const [decision,setDecision] = useState('Approve');
   const [scenario,setScenario] = useState({economic:'Recession', rate:2, price:-20});
+  // Kept here so "Back to pipeline" returns to the same tab, filters and page.
+  const [pipelineQuery,setPipelineQuery] = useState(DEFAULT_PIPELINE_QUERY);
+  const [loanId,setLoanId] = useState(null);
 
   useEffect(()=>{
     if(authConfigurationError) return;
@@ -68,6 +71,8 @@ function App(){
         setSession({user,loading:false,error:''});
         setPage('dashboard');
         setMobileOpen(false);
+        setPipelineQuery(DEFAULT_PIPELINE_QUERY);
+        setLoanId(null);
       } catch(error) {
         if(current===version) setSession({user:null,loading:false,error:authErrorMessage(error)});
       }
@@ -121,8 +126,9 @@ function App(){
         {logoutError&&<p className="auth-error" role="alert">Could not sign out. {logoutError}</p>}
         {profile.error&&<p className="auth-error" role="alert">{profile.error}</p>}
         {page==='dashboard' && <Dashboard setPage={setPage}/>} 
-        {page==='pipeline' && <Pipeline setPage={setPage}/>} 
-        {page==='loan' && <LoanFile setPage={setPage}/>} 
+        {page==='pipeline' && <Pipeline role={profile.data?.role} query={pipelineQuery} setQuery={setPipelineQuery}
+          onOpenApplication={id=>{setLoanId(id);setPage('loan');}}/>}
+        {page==='loan' && <LoanFile applicationId={loanId} currentUid={session.user.uid} onBack={()=>setPage('pipeline')}/>}
         {page==='audit' && <Audit/>}
         {page==='stress' && <Stress scenario={scenario} setScenario={setScenario}/>} 
         {page==='decision' && <Decision decision={decision} setDecision={setDecision}/>} 
@@ -239,27 +245,158 @@ function Dashboard({setPage}){
   </>
 }
 
-function Pipeline({setPage}){
+// Real loan applications from AL-Core (GET /api/v1/loan-applications).
+const PIPELINE_PAGE_SIZE=15;
+const riskPillClass=tier=>tier?`pill ${tier.toLowerCase()}`:'pill neutral';
+const formatPercent=fraction=>`${Math.round(fraction*100)}%`;
+const formatDate=iso=>new Intl.DateTimeFormat('en-IE',{day:'2-digit',month:'short',year:'numeric'}).format(new Date(iso));
+const formatDateTime=iso=>new Intl.DateTimeFormat('en-IE',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(iso));
+const DEFAULT_PIPELINE_QUERY={view:'mine',filters:{status:'',riskTier:'',ltvGroup:''},pageNumber:1};
+
+function Pipeline({role,query,setQuery,onOpenApplication}){
+  const isBroker=role==='mortgage_broker';
+  const {view,filters,pageNumber}=query;
+  const [reloadKey,setReloadKey]=useState(0);
+  const [result,setResult]=useState({loading:true,error:'',data:null});
+  const unclaimedOnly=isBroker&&view==='unclaimed';
+
+  useEffect(()=>{
+    let cancelled=false;
+    setResult(current=>({...current,loading:true,error:''}));
+    listLoanApplications({page:pageNumber,pageSize:PIPELINE_PAGE_SIZE,unclaimedOnly,...filters})
+      .then(data=>{if(!cancelled) setResult({loading:false,error:'',data});})
+      .catch(error=>{if(!cancelled) setResult({loading:false,error:loanErrorMessage(error),data:null});});
+    return ()=>{cancelled=true;};
+  },[pageNumber,unclaimedOnly,filters,reloadKey]);
+
+  function changeFilter(key,value){setQuery(q=>({...q,filters:{...q.filters,[key]:value},pageNumber:1}));}
+  function changeView(next){setQuery(q=>({...q,view:next,pageNumber:1}));}
+  function setPageNumber(update){setQuery(q=>({...q,pageNumber:update(q.pageNumber)}));}
+  const rows=result.data?.items||[];
+  const filtered=Object.values(filters).some(Boolean);
+  const emptyMessage=filtered?'No applications match these filters.'
+    :unclaimedOnly?'There are no unclaimed applications right now.'
+    :isBroker?'You have not claimed any applications yet. Check the unclaimed applications.'
+    :'No applications are assigned to you yet.';
+
   return <>
-    <Hero eyebrow="Pipeline" title="Origination Pipeline" subtitle="Review, filter, and progress mortgage and HELOC applications." compact/>
+    <Hero eyebrow="Pipeline" title="Origination Pipeline" subtitle="Review, filter, and progress mortgage applications." compact/>
     <Card>
-      <div className="toolbar"><div className="search small"><Search size={17}/><input placeholder="Search applications..."/></div><select><option>Status</option><option>Applied</option><option>Under Review</option></select><select><option>Risk</option><option>Low</option><option>Medium</option><option>High</option></select><button className="primary">New application</button></div>
-      <div className="table-wrap"><table><thead><tr><th>ID</th><th>Borrower</th><th>Property</th><th>Amount</th><th>LTV</th><th>Risk</th><th>Status</th></tr></thead><tbody>{applicationRows.map(r=><tr key={r.id} tabIndex="0" onClick={()=>setPage('loan')}><td>{r.id}</td><td>{r.borrower}</td><td>{r.property}</td><td>{r.amount}</td><td>{r.ltv}</td><td><span className={`pill ${r.risk.toLowerCase()}`}>{r.risk}</span></td><td><span className="pill neutral">{r.status}</span></td></tr>)}</tbody></table></div>
+      <div className="toolbar sample-toolbar">
+        {isBroker&&<div className="sample-segments" role="group" aria-label="Which applications">
+          {[['mine','My applications'],['unclaimed','Unclaimed']].map(([value,label])=><button key={value} aria-pressed={view===value} onClick={()=>changeView(value)}>{label}</button>)}
+        </div>}
+        <select aria-label="Status" value={filters.status} onChange={e=>changeFilter('status',e.target.value)}><option value="">All statuses</option>{LOAN_STATUSES.map(s=><option key={s}>{s}</option>)}</select>
+        <select aria-label="Risk" value={filters.riskTier} onChange={e=>changeFilter('riskTier',e.target.value)}><option value="">All risk tiers</option>{RISK_TIERS.map(r=><option key={r}>{r}</option>)}</select>
+        <select aria-label="LTV" value={filters.ltvGroup} onChange={e=>changeFilter('ltvGroup',e.target.value)}><option value="">All LTV</option>{Object.entries(LTV_GROUPS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+        <span className="sample-count" aria-live="polite">{result.data?`${result.data.total} application${result.data.total===1?'':'s'}`:''}</span>
+      </div>
+      {result.error
+        ?<div className="empty" role="alert"><p>{result.error}</p><button className="secondary" onClick={()=>setReloadKey(key=>key+1)}><RotateCcw size={16}/>Try again</button></div>
+        :<div className="table-wrap" aria-busy={result.loading}><table><thead><tr><th>Application</th><th>Borrower</th><th>Property</th><th>Loan amount</th><th>LTV</th><th>Risk</th><th>Status</th><th>Submitted</th></tr></thead><tbody>
+          {rows.map(r=><tr key={r.loanApplicationId} tabIndex="0" aria-label={`Open application ${r.loanApplicationId.slice(0,8)}`}
+            onClick={()=>onOpenApplication(r.loanApplicationId)}
+            onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpenApplication(r.loanApplicationId);}}}>
+            <td title={r.loanApplicationId}>{r.loanApplicationId.slice(0,8)}</td>
+            <td>{r.borrowerFullName||'Unknown borrower'}</td>
+            <td>{r.propertySpec.county}<small className="sample-table-subtext">{r.propertySpec.propertyType}</small></td>
+            <td>{euro(r.loanAmount)}</td>
+            <td>{formatPercent(r.ltv)}</td>
+            <td><span className={riskPillClass(r.riskTier)}>{r.riskTier||'Not assessed'}</span></td>
+            <td><span className="pill neutral">{r.status}</span></td>
+            <td>{formatDate(r.createdAt)}</td>
+          </tr>)}
+          {!rows.length&&<tr><td colSpan={8} className="empty">{result.loading?'Loading applications...':emptyMessage}</td></tr>}
+        </tbody></table></div>}
+      {result.data?.totalPages>1&&<div className="settings-action-buttons pipeline-pages">
+        <button className="secondary" disabled={!result.data.hasPrevious||result.loading} onClick={()=>setPageNumber(n=>n-1)}>Previous</button>
+        <span className="sample-count">Page {result.data.page} of {result.data.totalPages}</span>
+        <button className="secondary" disabled={!result.data.hasNext||result.loading} onClick={()=>setPageNumber(n=>n+1)}>Next</button>
+      </div>}
     </Card>
   </>
 }
 
-function LoanFile({setPage}){
+// One loan application from AL-Core (GET /api/v1/loan-applications/{id}).
+function LoanFile({applicationId,currentUid,onBack}){
+  const [reloadKey,setReloadKey]=useState(0);
+  const [result,setResult]=useState({loading:Boolean(applicationId),error:'',data:null});
+
+  useEffect(()=>{
+    if(!applicationId) return;
+    let cancelled=false;
+    setResult({loading:true,error:'',data:null});
+    getLoanApplication(applicationId)
+      .then(data=>{if(!cancelled) setResult({loading:false,error:'',data});})
+      .catch(error=>{if(!cancelled) setResult({loading:false,error:loanErrorMessage(error,'The application could not be loaded. Please try again.'),data:null});});
+    return ()=>{cancelled=true;};
+  },[applicationId,reloadKey]);
+
+  const backButton=<button className="secondary" onClick={onBack}><ArrowLeft size={16}/>Back to pipeline</button>;
+  const hero=<Hero eyebrow="Loan review" title="Loan File / Collateral Assessment" subtitle="Review loan details, borrower finances, property data, and the application's progress." compact/>;
+  if(!applicationId||result.loading||result.error) return <>
+    {hero}
+    <Card><div className="empty" role={result.error?'alert':'status'}>
+      <p>{!applicationId?'Choose an application in the Loan Pipeline to see its details.':result.loading?'Loading application...':result.error}</p>
+      <div className="settings-action-buttons">{backButton}{result.error&&<button className="secondary" onClick={()=>setReloadKey(key=>key+1)}><RotateCcw size={16}/>Try again</button>}</div>
+    </div></Card>
+  </>;
+
+  const a=result.data;
+  const p=a.propertySpec;
+  // AL-Core only returns user IDs, so people are described by their role in this application.
+  const assignee=(uid,nobody)=>!uid?nobody:uid===currentUid?'You':'Assigned';
+  const actor=uid=>uid==='system'?'System':uid===currentUid?'You':uid===a.borrowerId?'Borrower':uid===a.brokerId?'Broker':uid===a.bankOfficerId?'Underwriter':'Team member';
   return <>
-    <Hero eyebrow="Loan review" title="Loan File / Collateral Assessment" subtitle="Review loan details, borrower information, property data, and valuation signals." compact/>
-    <div className="loan-header card"><div><strong>AL-1234</strong><span>123 Main St, Austin TX</span></div><span className="pill neutral">In Review</span><div className="tabs"><button className="active">Overview</button><button>Property</button><button>Borrower</button><button>Documents</button></div></div>
+    {hero}
+    <div className="loan-header card">
+      <div><strong title={a.loanApplicationId}>{a.loanApplicationId.slice(0,8)}</strong><span>{[p.address,p.county].filter(Boolean).join(', ')}</span></div>
+      <span className="pill neutral">{a.status}</span>
+      <div className="loan-header-actions">{backButton}</div>
+    </div>
     <section className="two-col-grid">
-      <Card title="Loan Details / Borrower Info" icon={FileText}><KeyValueGrid data={[['Loan amount','$560,000'],['Loan type','Conventional'],['Borrower','James Miller'],['DTI','32%'],['LTV','70%'],['Term','30 years fixed'],['Credit score','760'],['Reserves','9 months']]}/></Card>
-      <Card title="Property Information" icon={Building2}><KeyValueGrid data={[['Property type','Single Family'],['Year built','2018'],['Square footage','2,850 sq ft'],['Lot size','0.21 acres'],['Location','Austin, TX'],['Condition','Excellent']]}/><div className="flat-property-illustration" aria-label="Abstract property illustration"><Building2 size={56}/><span>Property image placeholder</span></div></Card>
-      <Card title="Value Comparison / Key Metrics" icon={BarChart3}><BarChartFlat values={[560,538,575]} labels={['Subject','Market Avg','Model Estimate']}/><div className="metric-list"><Metric label="Subject value" value="$560k"/><Metric label="Variance" value="+4.1%"/><Metric label="Confidence" value="92%"/></div></Card>
-      <Card title="Agent Info / Relevant Information" icon={BrainCircuit}><div className="agent-list">{['Property Valuation Agent','Risk Analysis Agent','Document Review Agent','Market Intelligence Agent'].map(x=><div key={x}><CheckCircle2 size={17}/><span>{x}</span></div>)}</div><div className="callout"><strong>Agent consensus</strong><span>Strong agreement</span><p>Property value is aligned with market comparables and current risk is acceptable.</p><button className="text-link" onClick={()=>setPage('audit')}>Open AI audit <ChevronRight size={15}/></button></div></Card>
+      <Card title="Loan Details / Borrower Info" icon={FileText}><KeyValueGrid data={[
+        ['Borrower',a.borrowerFullName||'Unknown borrower'],
+        ['Loan amount',euro(a.loanAmount)],
+        ['Deposit',euro(a.deposit)],
+        ['LTV',`${formatPercent(a.ltv)} (${LTV_GROUPS[a.ltvGroup]||a.ltvGroup})`],
+        ['Term',`${a.termYears} years`],
+        ['First-time buyer',a.firstTimeBuyer?'Yes':'No'],
+        ['Annual gross income',euro(a.annualGrossIncome)],
+        ['Annual debt repayments',euro(a.annualDebtRepayments)],
+      ]}/></Card>
+      <Card title="Property Information" icon={Building2}><KeyValueGrid data={[
+        ['Property type',p.propertyType],
+        ['County',p.county],
+        ['Address',p.address||'Not provided'],
+        ['Asking price',euro(p.askingPrice)],
+        ['Floor area',`${p.floorAreaM2} m²`],
+        ['Bedrooms / bathrooms',`${p.bedrooms} / ${p.bathrooms}`],
+        ['BER rating',p.ber||'Not provided'],
+      ]}/></Card>
+      <Card title="AI Assessment" icon={BrainCircuit}>
+        <span className={riskPillClass(a.riskTier)}>{a.riskTier?`${a.riskTier} risk`:'Not assessed'}</span>
+        <p className="sample-muted">{a.riskTier
+          ?'Risk tier from the AI engine assessment.'
+          :'The AI engine has not assessed this application yet. Its risk tier, valuation and agent deliberation will appear here once AL-Core runs the assessment.'}</p>
+      </Card>
+      <Card title="Assignment / Decision" icon={UserRoundCheck}>
+        <KeyValueGrid data={[
+          ['Broker',assignee(a.brokerId,'Unclaimed')],
+          ['Underwriter',assignee(a.bankOfficerId,'Not assigned')],
+          ['Decision',a.decision?`${a.decision.outcome} (${formatDate(a.decision.decidedAt)})`:'No decision yet'],
+          ['Last updated',formatDateTime(a.updatedAt)],
+        ]}/>
+        {a.decision&&<div className="callout"><strong>Reason</strong><p>{a.decision.reason}</p>
+          {a.decision.conditions.length>0&&<ul>{a.decision.conditions.map(condition=><li key={condition}>{condition}</li>)}</ul>}</div>}
+      </Card>
     </section>
-  </>
+    <Card title="Status history" icon={Clock3}>
+      <ol className="timeline status-history">{a.statusHistory.map((change,index)=><li key={index}>
+        <time dateTime={change.changedAt}>{formatDateTime(change.changedAt)}</time><strong>{change.status}</strong><span>by {actor(change.changedById)}</span>
+      </li>)}</ol>
+    </Card>
+  </>;
 }
 
 function Audit(){
@@ -326,9 +463,7 @@ function Donut({value,label,segments}){
   return <div className="donut-wrap"><div className="donut" style={{'--donut-fill':total ? `conic-gradient(${stops})` : 'var(--line)'}}><div><strong>{value}</strong><span>{label}</span></div></div></div>;
 }
 function KeyValueGrid({data}){return <dl className="kv-grid">{data.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}
-function Metric({label,value}){return <div className="metric"><span>{label}</span><strong>{value}</strong></div>}
 function MetricCard({icon:Icon,label,value,delta}){return <Card><div className="metric-card"><span className="icon-chip"><Icon size={19}/></span><span>{label}</span><strong>{value}</strong><small>{delta}</small></div></Card>}
-function BarChartFlat({values,labels}){const max=Math.max(...values);return <div className="bar-chart">{values.map((v,i)=><div className="bar-col" key={labels[i]}><strong>{`$${v}k`}</strong><div className="bar" style={{height:`${(v/max)*150}px`}}/><span>{labels[i]}</span></div>)}</div>}
 function LineChartFlat({base,stressed}){
   const revealId=useId();
   const width=720,height=250,pad=28,max=110;
