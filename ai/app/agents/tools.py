@@ -11,9 +11,11 @@ Ireland changes them, and the stress rate is lender policy.
 
 from dataclasses import dataclass, field
 
-# Central Bank of Ireland mortgage measures (first-time buyer defaults)
-LTI_LIMIT = 4.0  # loan as a multiple of gross annual income
-LTV_LIMIT_PCT = 90.0  # loan as a percentage of property value
+# Central Bank of Ireland mortgage measures (limits effective 1 January 2023)
+LTI_LIMIT_FTB = 4.0  # first-time buyers: loan as a multiple of gross annual income
+LTI_LIMIT_SSB = 3.5  # second and subsequent buyers
+LTI_LIMIT = LTI_LIMIT_FTB  # default, kept for callers that do not say
+LTV_LIMIT_PCT = 90.0  # loan as a percentage of property value (both buyer types)
 # Lender policy
 DTI_LIMIT_PCT = 40.0  # total debt service as a share of gross income
 STRESS_BPS = 200  # repayments are tested 2 percentage points higher
@@ -28,6 +30,7 @@ class Affordability:
     dti_percent: float
     lti_multiple: float
     disposable_annual: float
+    lti_limit: float = LTI_LIMIT
     breaches: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -40,7 +43,7 @@ class Affordability:
             "disposable_annual": round(self.disposable_annual),
             "breaches": self.breaches,
             "limits": {
-                "lti": LTI_LIMIT,
+                "lti": self.lti_limit,
                 "dti_percent": DTI_LIMIT_PCT,
                 "stress_bps": STRESS_BPS,
             },
@@ -62,8 +65,13 @@ def assess_affordability(
     loan: float,
     rate_percent: float,
     term_years: int,
+    first_time_buyer: bool = True,
 ) -> Affordability:
-    """Can the borrower service this loan if rates rise by STRESS_BPS?"""
+    """Can the borrower service this loan if rates rise by STRESS_BPS?
+
+    The loan-to-income limit depends on the buyer: 4x for first-time buyers,
+    3.5x for second and subsequent buyers.
+    """
     rate = rate_percent / 100
     stressed_rate = rate + STRESS_BPS / 10_000
 
@@ -78,11 +86,13 @@ def assess_affordability(
         dti_percent=annual_service / income * 100,
         lti_multiple=loan / income,
         disposable_annual=income - annual_service,
+        lti_limit=LTI_LIMIT_FTB if first_time_buyer else LTI_LIMIT_SSB,
     )
 
-    if result.lti_multiple > LTI_LIMIT:
+    if result.lti_multiple > result.lti_limit:
         result.breaches.append(
-            f"loan-to-income {result.lti_multiple:.2f} exceeds the limit of {LTI_LIMIT}"
+            f"loan-to-income {result.lti_multiple:.2f} exceeds the limit of "
+            f"{result.lti_limit}"
         )
     if result.dti_percent > DTI_LIMIT_PCT:
         result.breaches.append(

@@ -8,7 +8,10 @@ it changes the API contract, so change it deliberately.
 
 from typing import Annotated, Any, Literal, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.counties import normalize_county
+from app.schemas import BER_GRADES, PROPERTY_TYPES
 
 
 def append(existing: list, new: list) -> list:
@@ -17,14 +20,22 @@ def append(existing: list, new: list) -> list:
 
 
 class PropertyInput(BaseModel):
+    """Validated like ValuationRequest, so a bad county or property type is a
+    422 on POST instead of a failed committee run."""
+
     county: str
     floor_area_m2: float = Field(ge=20, le=600)
     bedrooms: int = Field(ge=1, le=10)
     bathrooms: int = Field(0, ge=0, le=10)
-    property_type: str
-    ber: str | None = None
+    property_type: PROPERTY_TYPES
+    ber: BER_GRADES | None = None
     latitude: float | None = None
     longitude: float | None = None
+
+    @field_validator("county")
+    @classmethod
+    def known_county(cls, value: str) -> str:
+        return normalize_county(value)
 
 
 class ApplicationInput(BaseModel):
@@ -64,4 +75,5 @@ class CommitteeState(TypedDict, total=False):
     valuation: dict[str, Any]
     market: dict[str, Any]
     decision: dict[str, Any]
+    risk: dict[str, Any]
     trail: Annotated[list[dict[str, Any]], append]

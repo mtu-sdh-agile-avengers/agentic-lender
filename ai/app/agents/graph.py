@@ -1,12 +1,15 @@
 """The credit committee graph (backlog ALG4-80).
 
-    affordability ──► auto_decline ──► END          (hard limit breached)
-                 └──► valuation ──► market ──► strategist ──► END
+    affordability ──► auto_decline ──────────────────────────► risk ──► END
+                 └──► valuation ──► market ──► strategist ──► risk ──► END
+
+(auto_decline: a hard limit is breached, no model is called.)
 
 Each node is a plain function that receives the shared state and returns the
-keys it wants to add. Affordability and valuation are deterministic Python;
-only the strategist calls a language model. Market and strategist are filled
-in by ALG4-83 and ALG4-84; here they are wired and working but minimal.
+keys it wants to add. Affordability, valuation and risk are deterministic
+Python; only the strategist calls a language model. Market and strategist
+are filled in by ALG4-83 and ALG4-84; here they are wired and working but
+minimal.
 """
 
 import json
@@ -16,6 +19,7 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
+from app.agents.risk import assess_risk
 from app.agents.state import CommitteeState
 from app.agents.tools import assess_affordability, assess_collateral
 
@@ -38,6 +42,7 @@ def affordability_node(state: CommitteeState) -> CommitteeState:
         loan=app["loan"],
         rate_percent=app["rate_percent"],
         term_years=app["term_years"],
+        first_time_buyer=app.get("first_time_buyer", True),
     ).as_dict()
 
     return {
@@ -222,6 +227,27 @@ def auto_decline_node(state: CommitteeState) -> CommitteeState:
     }
 
 
+def risk_node(state: CommitteeState) -> CommitteeState:
+    """Risk tier and approval chance (see agents/risk.py). Runs on both paths.
+
+    After an automatic decline there is no valuation, so LTV is taken on the
+    asking price, the same fallback the valuation node uses without a model.
+    """
+    app = state["application"]
+    collateral = state.get("valuation") or assess_collateral(
+        app["loan"], app["asking_price"], app["asking_price"]
+    )
+    risk = assess_risk(state["affordability"], collateral)
+    return {
+        "risk": risk.model_dump(),
+        "trail": _step(
+            "risk",
+            f"{risk.tier}, score {risk.score}/100, "
+            f"approval chance {risk.approval_chance_percent}%",
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
@@ -245,6 +271,7 @@ def build_committee(model_bundle: dict | None = None, llm=None, providers=None):
         "strategist", lambda state: strategist_node(state, llm=llm, providers=providers)
     )
     graph.add_node("auto_decline", auto_decline_node)
+    graph.add_node("risk", risk_node)
 
     graph.set_entry_point("affordability")
     graph.add_conditional_edges(
@@ -254,6 +281,7 @@ def build_committee(model_bundle: dict | None = None, llm=None, providers=None):
     )
     graph.add_edge("valuation", "market")
     graph.add_edge("market", "strategist")
-    graph.add_edge("strategist", END)
-    graph.add_edge("auto_decline", END)
+    graph.add_edge("strategist", "risk")
+    graph.add_edge("auto_decline", "risk")
+    graph.add_edge("risk", END)
     return graph.compile()

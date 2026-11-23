@@ -7,7 +7,9 @@ mobile app use to generate their clients.
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.counties import normalize_county
 
 # The 15 Irish BER grades, best to worst. "SI_666" is an exemption code, not a
 # rating, so it is not accepted here.
@@ -66,6 +68,11 @@ class ValuationRequest(BaseModel):
 
     # Optional: the seller's price, so the Valuation Agent can compare
     asking_price: float | None = Field(None, gt=0, examples=[350000])
+
+    @field_validator("county")
+    @classmethod
+    def known_county(cls, value: str) -> str:
+        return normalize_county(value)
 
     @model_validator(mode="after")
     def coordinates_come_in_pairs(self) -> "ValuationRequest":

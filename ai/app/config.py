@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # service
     service_name: str = "al-ai-engine"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     environment: str = "development"
     log_level: str = "INFO"
 
