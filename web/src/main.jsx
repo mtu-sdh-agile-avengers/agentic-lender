@@ -6,11 +6,12 @@ import {
   Building2, ShieldCheck, BrainCircuit, TrendingUp, Download, Link2,
   Play, UserRoundCheck, Gauge, LineChart, Menu, X, Clock3, ArrowRight, ArrowLeft,
   CircleCheckBig, CircleX, ClipboardCheck, Sparkles, Landmark, WalletCards,
-  Save, RotateCcw
+  Save, RotateCcw, Blocks
 } from 'lucide-react';
 import './styles.css';
 import './aero.css';
 import {authConfigurationError} from './firebase.js';
+import {LedgerView, BlockchainExplorer} from './ledger/LedgerView.jsx';
 import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
 import {authErrorMessage} from './authErrors.js';
 import {getMyProfile, profileErrorMessage, roleLabel, listLoanApplications, getLoanApplication, loanErrorMessage, LOAN_STATUSES, RISK_TIERS, LTV_GROUPS} from './api.js';
@@ -132,6 +133,7 @@ function App(){
         {page==='audit' && <Audit/>}
         {page==='stress' && <Stress scenario={scenario} setScenario={setScenario}/>} 
         {page==='decision' && <Decision decision={decision} setDecision={setDecision}/>} 
+        {page==='ledger' && <BlockchainExplorer Hero={Hero}/>}
         {page==='brokers' && <Brokers/>}
         {page==='analytics' && <Analytics/>}
         {page==='documents' && <Documents/>}
@@ -150,6 +152,7 @@ function Sidebar({page,setPage,mobileOpen,setMobileOpen,onLogout,loggingOut}){
         <button className={page==='audit'?'active':''} onClick={()=>{setPage('audit');setMobileOpen(false)}}><BrainCircuit size={19}/>AI Audit</button>
         <button className={page==='stress'?'active':''} onClick={()=>{setPage('stress');setMobileOpen(false)}}><Gauge size={19}/>Stress Testing</button>
         <button className={page==='decision'?'active':''} onClick={()=>{setPage('decision');setMobileOpen(false)}}><Link2 size={19}/>Settlement</button>
+        <button className={page==='ledger'?'active':''} onClick={()=>{setPage('ledger');setMobileOpen(false)}}><Blocks size={19}/>Blockchain</button>
         <button className={page==='settings'?'active':''} onClick={()=>{setPage('settings');setMobileOpen(false)}}><Settings size={19}/><span>Settings</span></button>
       </nav>
       <div className="sidebar-quote">“Clear lending.<br/>Stronger outcomes.”</div>
@@ -396,6 +399,7 @@ function LoanFile({applicationId,currentUid,onBack}){
         <time dateTime={change.changedAt}>{formatDateTime(change.changedAt)}</time><strong>{change.status}</strong><span>by {actor(change.changedById)}</span>
       </li>)}</ol>
     </Card>
+    <LedgerView application={a}/>
   </>;
 }
 
