@@ -1,6 +1,5 @@
 from src.loan_applications.enums import LtvGroup
 
-
 _LTV_GROUP_UPPER_BOUNDS: tuple[tuple[float, LtvGroup], ...] = (
     (0.6, LtvGroup.UP_TO_60),
     (0.8, LtvGroup.FROM_60_TO_80),

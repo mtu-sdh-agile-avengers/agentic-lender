@@ -35,7 +35,7 @@ router = APIRouter(
     "",
     response_model=LoanApplicationResponse,
     status_code=status.HTTP_201_CREATED,
-    description="Submits a new loan application (retail borrower)."
+    description="Submits a new loan application (retail borrower).",
 )
 @limiter.limit("5/minute")
 async def submit_loan_application(

@@ -25,3 +25,6 @@ class UserProfileFirestoreRepository(FirestoreRepository[UserProfileModel]):
 
     async def get_user_profile(self, uid: str) -> UserProfileModel | None:
         return await self._get(uid)
+
+    async def get_user_profiles(self, uids: list[str]) -> dict[str, UserProfileModel]:
+        return await self._get_many(uids)

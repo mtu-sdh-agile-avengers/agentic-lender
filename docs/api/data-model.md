@@ -248,7 +248,7 @@ classDiagram
 
   conversations "1..1" *-- "0..*" messages
   conversations "0..*" --> "1..1" loan_applications : loan_application_id
-  conversations "0..*" --> "2..3" users : participant_ids
+  conversations "0..*" --> "2..2" users : participant_ids
   messages "0..*" --> "1..1" users : sender_id
 
   stress_tests "0..*" --> "1..1" users : user_id

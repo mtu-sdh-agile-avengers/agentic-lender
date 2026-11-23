@@ -16,7 +16,7 @@ dependencies = [
     "pytest==9.2.0",
     "python-dotenv==1.2.4",
     "slowapi>=0.1.10",
-    "ruff==0.17.5",
+    "ruff==0.17.6",
     "requests>=2.34.2",
     "pydantic-settings==2.16.3",
 ]

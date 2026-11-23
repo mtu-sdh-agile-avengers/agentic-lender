@@ -1,9 +1,9 @@
 from typing import Any, Callable
 
 from google.cloud.firestore import (
+    AsyncTransaction,
     FieldFilter,
     Query,
-    AsyncTransaction,
     async_transactional,
 )
 

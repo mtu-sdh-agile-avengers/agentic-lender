@@ -10,10 +10,11 @@ from slowapi.errors import RateLimitExceeded
 
 from src.ai_engine_client.dependencies import AIEngineClientDep
 from src.config import get_config
+from src.conversations.v1.router import router as conversations_router
 from src.firebase.connection import init_firebase
+from src.loan_applications.v1.router import router as loan_applications_router
 from src.rate_limiting import limiter
 from src.users.v1.router import router as users_router
-from src.loan_applications.v1.router import router as loan_applications_router
 
 
 @asynccontextmanager
@@ -95,6 +96,7 @@ load_routers(
     app,
     users_router,
     loan_applications_router,
+    conversations_router,
 )
 
 
