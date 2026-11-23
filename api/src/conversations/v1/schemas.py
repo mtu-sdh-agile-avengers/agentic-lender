@@ -1,7 +1,7 @@
 import datetime
 from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from src.auth.enums import UserRole
 from src.conversations.models import MAX_MESSAGE_LENGTH, ConversationModel, MessageModel
@@ -13,6 +13,10 @@ class ConversationCreateBody(BaseSchema):
     """Body of `POST /api/v1/conversations` (borrower only)."""
 
     loan_application_id: str
+    with_officer: bool = Field(
+        False,
+        description="`true` to talk to the assigned bank officer; `false` (default) to talk to the broker",
+    )
 
 
 class MessageCreateBody(BaseSchema):

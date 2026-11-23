@@ -3,9 +3,9 @@ from collections.abc import Callable
 from src.auth.enums import UserRole
 from src.auth.models import CurrentUserModel
 from src.loan_applications.access import (
+    ASSIGNEE_FIELD,
     has_modify_access,
     has_view_access,
-    ASSIGNEE_FIELD,
 )
 from src.loan_applications.enums import (
     LoanApplicationStatus,

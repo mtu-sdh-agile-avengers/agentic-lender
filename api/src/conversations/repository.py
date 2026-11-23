@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Optional, Protocol
+from typing import Any
 
 from google.cloud.exceptions import Conflict
 from google.cloud.firestore import ArrayRemove, AsyncCollectionReference, Query

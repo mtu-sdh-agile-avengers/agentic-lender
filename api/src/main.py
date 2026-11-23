@@ -8,12 +8,15 @@ from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from src.ai_engine_client.client import AIEngineClient
 from src.ai_engine_client.dependencies import AIEngineClientDep
+from src.assessments.v1.router import router as assessments_router
 from src.config import get_config
 from src.conversations.v1.router import router as conversations_router
 from src.firebase.connection import init_firebase
 from src.loan_applications.v1.router import router as loan_applications_router
 from src.rate_limiting import limiter
+from src.stress_tests.v1.router import router as stress_tests_router
 from src.users.v1.router import router as users_router
 
 
@@ -26,8 +29,14 @@ async def lifespan(app: FastAPI):
         f"database_string={get_config().firestore_database_name}, emulator={os.environ.get('FIRESTORE_EMULATOR_HOST')}"
     )
 
-    yield
-    logger.debug("Server shutdown")
+    app.state.ai_engine_client = AIEngineClient(
+        get_config().ai_engine_url, get_config().internal_api_key
+    )
+    try:
+        yield
+    finally:
+        await app.state.ai_engine_client.aclose()
+        logger.debug("Server shutdown")
 
 
 def load_routers(api: FastAPI, *routers: APIRouter):
@@ -97,6 +106,8 @@ load_routers(
     users_router,
     loan_applications_router,
     conversations_router,
+    assessments_router,
+    stress_tests_router,
 )
 
 

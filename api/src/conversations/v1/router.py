@@ -28,8 +28,8 @@ ParticipantDep = Annotated[
     "",
     status_code=status.HTTP_201_CREATED,
     description=(
-        "Borrower opens the conversation about one of their applications with the broker (or, without a "
-        "broker, the assigned bank officer). Idempotent: an existing conversation is returned."
+        "Opens the borrower's conversation about one of their applications with the broker or "
+        "assigned bank officer). Idempotent: an existing conversation is returned."
     ),
     responses={
         404: {"detail": "Loan application not found"},
@@ -44,7 +44,7 @@ async def open_conversation(
     service: ConversationServiceDep,
 ) -> ConversationResponse:
     conversation = await service.open_conversation(
-        current_user, data.loan_application_id
+        current_user, data.loan_application_id, with_officer=data.with_officer
     )
     return ConversationResponse.from_conversation(conversation, current_user.uid)
 
@@ -87,7 +87,7 @@ async def send_message(
 @router.get(
     "/{conversation_id}/messages",
     description=(
-        "Messages of a conversation, oldest first. Without `before` returns the latest page and marks the "
+        "Returns messages of a conversation, oldest first. Without `before` returns the latest page and marks the "
         "conversation as read; pass the `created_at` of the oldest message as `before` to load older ones."
     ),
     responses={404: {"detail": "Conversation not found"}},

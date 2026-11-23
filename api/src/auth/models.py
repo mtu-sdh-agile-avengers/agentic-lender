@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from src.auth.enums import UserRole, SignInProvider
+from src.auth.enums import SignInProvider, UserRole
 
 
 class CurrentUserModel(BaseModel):

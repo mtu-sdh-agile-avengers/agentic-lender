@@ -8,6 +8,7 @@ class CollectionPath(StrEnum):
     LOAN_APPLICATIONS = "loan_applications"
     DOCUMENTS = "documents"
     ASSESSMENTS = "assessments"
+    AGENT_STEPS = "agent_steps"
 
     SUPPORT_TICKETS = "support_tickets"
     REVIEWS = "reviews"

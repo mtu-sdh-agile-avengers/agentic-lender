@@ -61,6 +61,7 @@ class ConversationService:
         self,
         current_user: CurrentUserModel,
         loan_application_id: str,
+        *,
         with_officer: bool = False,
     ) -> ConversationModel:
         """Opens (i.e., creates) conversation about a loan application between its borrower and the staff member handling it (broker / bank officer).
@@ -87,9 +88,11 @@ class ConversationService:
         if staff_id is None:
             raise NoStaffAssignedError
 
+        staff_role = "officer" if with_officer else "broker"
+
         return await self._conversations.create_conversation(
             ConversationModel(
-                id=application.loan_application_id,
+                id=f"{application.loan_application_id}_{staff_role}",  # e.g., app-1_broker & app-1_officer
                 loan_application_id=application.loan_application_id,
                 borrower_id=application.borrower_id,
                 staff_id=staff_id,

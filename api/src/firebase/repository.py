@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from google.cloud.firestore import AsyncClient, AsyncCollectionReference
+from google.cloud.firestore import (
+    AsyncClient,
+    AsyncCollectionReference,
+    AsyncDocumentReference,
+)
 from google.cloud.firestore_v1 import AsyncQuery
 
 
@@ -13,9 +17,17 @@ class FirestoreRepository[T](ABC):
     _db: AsyncClient  # database client, required for transactions
     _col_ref: AsyncCollectionReference  # actual reference to access collection
 
-    def __init__(self, db: AsyncClient) -> None:
+    def __init__(
+        self, db: AsyncClient, parent: AsyncDocumentReference | None = None
+    ) -> None:
+        """Builds the collection reference (no network call).
+
+        Args:
+            db: async Firestore client.
+            parent: document the collection belongs to; `None` (default) means a top-level collection.
+        """
         self._db = db
-        self._col_ref = db.collection(self.col)
+        self._col_ref = (parent if parent is not None else db).collection(self.col)
 
     # Document in Firestore represented as a dictionary, therefore conversion methods are required.
     @abstractmethod
@@ -123,7 +135,7 @@ class FirestoreRepository[T](ABC):
 
         The query is built lazily (`where`, `order_by`, `limit` do not touch the network); it is executed
         here, and the results are streamed from Firestore and collected into memory. Always apply `.limit()`
-        before calling this method (otherwise, stack overflow may occur).
+        before calling this method.
 
         Args:
             query: Firestore query or collection reference (a collection without filters means all of its documents).

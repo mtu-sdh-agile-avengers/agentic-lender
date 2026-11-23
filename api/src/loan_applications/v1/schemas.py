@@ -4,17 +4,16 @@ from typing import Self
 from pydantic import Field, model_validator
 
 from src.loan_applications.enums import (
+    BerRating,
+    County,
     LoanApplicationStatus,
     LtvGroup,
-    RiskTier,
-    County,
     PropertyType,
-    BerRating,
+    RiskTier,
     UnderwritingOutcome,
 )
-from src.loan_applications.models import PropertySpecModel, LoanApplicationModel
-from src.schemas import PaginationQuery, BaseSchema
-
+from src.loan_applications.models import LoanApplicationModel, PropertySpecModel
+from src.schemas import BaseSchema, PaginationQuery
 
 # Query + Body Models ---------------------------------------------------------------
 

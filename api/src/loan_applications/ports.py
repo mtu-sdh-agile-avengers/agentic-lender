@@ -1,4 +1,5 @@
-from typing import Protocol, Callable
+from collections.abc import Callable
+from typing import Protocol
 
 from pydantic import BaseModel
 
@@ -35,6 +36,18 @@ class LoanApplicationRepositoryPort(Protocol):
     async def update_loan_application(
         self, application_id: str, mutator: Callable[[LoanApplicationModel], None]
     ) -> LoanApplicationModel: ...
+
+    async def get_loan_applications_by_ids(
+        self, application_ids: list[str]
+    ) -> dict[str, LoanApplicationModel]: ...
+    async def get_portfolio(
+        self,
+        *,
+        statuses: set[LoanApplicationStatus],
+        broker_id: str | None = None,
+        bank_officer_id: str | None = None,
+        limit: int,
+    ) -> list[LoanApplicationModel]: ...
 
 
 # required, so loan application service would not be able to add account or get excessive data

@@ -1,9 +1,9 @@
 import datetime
 from typing import Self
 
-from src.schemas import BaseSchema
-from src.auth.enums import UserRole, SignInProvider
+from src.auth.enums import SignInProvider, UserRole
 from src.auth.models import CurrentUserModel
+from src.schemas import BaseSchema
 from src.users.models import UserProfileModel
 
 

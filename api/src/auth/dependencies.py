@@ -15,7 +15,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 
-from src.auth.enums import UserRole, SignInProvider
+from src.auth.enums import SignInProvider, UserRole
 from src.auth.exceptions import ForbiddenError, UnauthorizedError
 from src.auth.models import CurrentUserModel
 

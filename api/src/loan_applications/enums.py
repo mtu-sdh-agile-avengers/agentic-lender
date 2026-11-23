@@ -8,9 +8,6 @@ class LtvGroup(StrEnum):
     OVER_90 = "over_90"
 
 
-# --- property_spec related
-
-
 class County(StrEnum):
     """26 counties of the Republic of Ireland. Match `county_centroid.json` of AL-AI Engine."""
 
@@ -25,8 +22,8 @@ class County(StrEnum):
     KILDARE = "Kildare"
     KILKENNY = "Kilkenny"
     LAOIS = "Laois"
-    LEITRIM = "Letrim"
-    LIMERICK = " Limerick"
+    LEITRIM = "Leitrim"
+    LIMERICK = "Limerick"
     LONGFORD = "Longford"
     LOUTH = "Louth"
     MAYO = "Mayo"

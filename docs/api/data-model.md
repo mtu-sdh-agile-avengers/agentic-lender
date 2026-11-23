@@ -686,7 +686,7 @@ the interest rate (+100 to +300 bps) and/or property prices fall. Created by AL-
 | created_at           | datetime        | x   | core   | Payment creation time stamp                                                                                                               |
 
 > [!WARNING]
-> If `statues` are used then "portfolio-wide" stress test is ran, but there is one simplification, We assume that a single bank underwriting officer represents the bank and that, for him, 
+> If `statuses` are used then "portfolio-wide" stress test is ran, but there is one simplification, We assume that a single bank underwriting officer represents the bank and that, for him, 
 the "portfolio" consists of all the loan applications with which he is related to.
 
 #### results

@@ -1,0 +1,13 @@
+from typing import Protocol
+
+from src.stress_tests.models import StressTestModel
+
+
+class StressTestRepositoryPort(Protocol):
+    def next_id(self) -> str: ...
+
+    async def add_stress_test(self, stress_test: StressTestModel) -> None: ...
+    async def get_stress_test(self, stress_test_id: str) -> StressTestModel | None: ...
+    async def get_stress_tests(
+        self, user_id: str, limit: int
+    ) -> list[StressTestModel]: ...
