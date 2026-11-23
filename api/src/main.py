@@ -11,12 +11,15 @@ from slowapi.errors import RateLimitExceeded
 from src.ai_engine_client.client import AIEngineClient
 from src.ai_engine_client.dependencies import AIEngineClientDep
 from src.assessments.v1.router import router as assessments_router
+from src.audit_packs.v1.router import router as audit_packs_router
 from src.config import get_config
 from src.conversations.v1.router import router as conversations_router
 from src.firebase.connection import init_firebase
 from src.loan_applications.v1.router import router as loan_applications_router
 from src.rate_limiting import limiter
+from src.reviews.v1.router import router as reviews_router
 from src.stress_tests.v1.router import router as stress_tests_router
+from src.support_tickets.v1.router import router as support_tickets_router
 from src.users.v1.router import router as users_router
 
 
@@ -108,6 +111,9 @@ load_routers(
     conversations_router,
     assessments_router,
     stress_tests_router,
+    support_tickets_router,
+    reviews_router,
+    audit_packs_router,
 )
 
 

@@ -1,5 +1,7 @@
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
+from src.assessments.models import AssessmentModel
 from src.auth.enums import UserRole
 from src.auth.models import CurrentUserModel
 from src.loan_applications.access import (
@@ -18,8 +20,14 @@ from src.loan_applications.exceptions import (
     LoanApplicationInvalidAssigneeError,
     LoanApplicationNotFoundError,
 )
-from src.loan_applications.models import LoanApplicationModel, PropertySpecModel
+from src.loan_applications.models import (
+    LoanApplicationModel,
+    LoanDocumentModel,
+    PropertySpecModel,
+    UserInfoModel,
+)
 from src.loan_applications.ports import (
+    AssessmentReaderPort,
     LoanApplicationQuery,
     LoanApplicationRepositoryPort,
     UserInfoSearchGatewayPort,
@@ -27,12 +35,30 @@ from src.loan_applications.ports import (
 from src.schemas import PaginatedResponse
 
 
+@dataclass(frozen=True)
+class LoanFileView:
+    """Everything the loan file page shows about one application (its "dossier")."""
+
+    application: LoanApplicationModel
+    borrower: (
+        UserInfoModel | None
+    )  # `None` if the borrower has no profile (e.g. seeded data)
+    documents: list[LoanDocumentModel] = field(default_factory=list)
+    latest_assessment: AssessmentModel | None = (
+        None  # `None` until the AI committee was asked
+    )
+
+
 class LoanApplicationService:
     def __init__(
-        self, repo: LoanApplicationRepositoryPort, users: UserInfoSearchGatewayPort
+        self,
+        repo: LoanApplicationRepositoryPort,
+        users: UserInfoSearchGatewayPort,
+        assessments: AssessmentReaderPort | None = None,
     ) -> None:
         self._repo = repo
         self._users = users
+        self._assessments = assessments
 
     async def submit(
         self,
@@ -76,6 +102,50 @@ class LoanApplicationService:
             raise LoanApplicationNotFoundError(application_id)
 
         return application
+
+    async def get_file(
+        self, current_user: CurrentUserModel, application_id: str
+    ) -> LoanFileView:
+        """Returns the full dossier of a loan application (ALG4-255).
+
+        Who may see it: the borrower who submitted it, the broker of a referred client (or any broker while
+        the application is unclaimed, so it can be claimed), and the bank officer it was assigned to.
+
+        Args:
+            current_user: user who sent the request.
+            application_id: ID of the loan application.
+
+        Returns:
+            LoanFileView: the application with the borrower's contact details, its documents and a summary of
+            the latest AI committee run.
+
+        Raises:
+            LoanApplicationNotFoundError: if the application does not exist (404).
+            LoanApplicationAccessError: if it exists but is not in the user's clients / portfolio (403).
+        """
+        application = await self._repo.get_loan_application(application_id)
+
+        if application is None:
+            raise LoanApplicationNotFoundError(application_id)
+
+        if not has_view_access(current_user, application):
+            raise LoanApplicationAccessError(application_id)
+
+        borrower = await self._users.find_user(application.borrower_id)
+        documents = await self._repo.get_documents(application_id)
+
+        latest_assessment = None
+        if self._assessments is not None and application.assessment_id is not None:
+            latest_assessment = await self._assessments.get_assessment(
+                application_id, application.assessment_id
+            )
+
+        return LoanFileView(
+            application=application,
+            borrower=borrower,
+            documents=documents,
+            latest_assessment=latest_assessment,
+        )
 
     async def get_all_with_filters(
         self,

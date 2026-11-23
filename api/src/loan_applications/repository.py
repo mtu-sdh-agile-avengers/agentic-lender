@@ -12,9 +12,12 @@ from src.enums import CollectionPath
 from src.firebase.repository import FirestoreRepository
 from src.loan_applications.enums import LoanApplicationStatus
 from src.loan_applications.exceptions import LoanApplicationNotFoundError
-from src.loan_applications.models import LoanApplicationModel
+from src.loan_applications.models import LoanApplicationModel, LoanDocumentModel
 from src.loan_applications.ports import LoanApplicationQuery
 from src.schemas import PaginatedResponse
+
+# upper bound of documents read for one loan file
+MAX_DOCUMENTS = 100
 
 
 class LoanApplicationFirestoreRepository(FirestoreRepository[LoanApplicationModel]):
@@ -118,6 +121,30 @@ class LoanApplicationFirestoreRepository(FirestoreRepository[LoanApplicationMode
             query_filters.append(("broker_id", None))
 
         return query_filters
+
+    async def get_documents(self, application_id: str) -> list[LoanDocumentModel]:
+        """Reads the documents attached to a loan application, oldest upload first.
+
+        Args:
+            application_id: ID of the loan application.
+
+        Returns:
+            list[LoanDocumentModel]: at most `MAX_DOCUMENTS` documents; empty if there are none.
+        """
+        documents_ref = self._col_ref.document(application_id).collection(
+            CollectionPath.DOCUMENTS
+        )
+        documents = [
+            LoanDocumentModel.model_validate(
+                {**(snap.to_dict() or {}), "document_id": snap.id}
+            )
+            async for snap in documents_ref.limit(MAX_DOCUMENTS).stream()
+        ]
+        # sorted here, not with order_by: a document without `uploaded_at` would be left out of the query
+        return sorted(
+            documents,
+            key=lambda d: (d.uploaded_at is None, d.uploaded_at or 0, d.name),
+        )
 
     async def get_loan_applications_by_ids(
         self, application_ids: list[str]

@@ -27,6 +27,25 @@ class UserInfoModel(BaseModel):
     uid: str
     full_name: str | None
     role: UserRole
+    email: str | None = None
+    phone: str | None = None
+
+
+class LoanDocumentModel(BaseModel):
+    """File attached to a loan application (`loan_applications/{id}/documents/{id}`).
+
+    The file itself is kept in Cloud Storage; Firestore keeps only its description. Every field except
+    the ID is optional, so documents written by older clients still load.
+    """
+
+    document_id: str
+    name: str = "Untitled document"
+    category: str | None = None  # e.g. payslip, bank_statement, id_document, property
+    content_type: str | None = None  # MIME type, e.g. application/pdf
+    size_bytes: int | None = None
+    storage_path: str | None = None  # object path in Cloud Storage
+    uploaded_by_id: str | None = None
+    uploaded_at: datetime.datetime | None = None
 
 
 class PropertySpecModel(BaseModel):
