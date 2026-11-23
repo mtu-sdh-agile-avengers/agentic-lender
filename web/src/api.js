@@ -57,6 +57,42 @@ export function getLoanApplication(id) {
   return apiRequest(`/api/v1/loan-applications/${encodeURIComponent(id)}`);
 }
 
+const applicationPath = id => `/api/v1/loan-applications/${encodeURIComponent(id)}`;
+
+// PUT / DELETE .../broker: a broker claims an unclaimed application, or returns it to the
+// unclaimed pool (not allowed once an underwriter is assigned). Both answer with the application.
+export function claimLoanApplication(id) {
+  return apiRequest(`${applicationPath(id)}/broker`, {method: 'PUT'});
+}
+export function releaseLoanApplication(id) {
+  return apiRequest(`${applicationPath(id)}/broker`, {method: 'DELETE'});
+}
+
+// POST .../assessments: starts an AI committee run (assigned broker or underwriter only) and
+// answers at once with status "queued"; if a run is already in progress, that run is returned.
+export function requestAssessment(id) {
+  return apiRequest(`${applicationPath(id)}/assessments`, {method: 'POST'});
+}
+// GET .../assessments/latest: the latest run. While it is queued or running, each call makes
+// AL-Core check the AI engine once, so the page polls it. 404 means it was never assessed.
+export function getLatestAssessment(id) {
+  return apiRequest(`${applicationPath(id)}/assessments/latest`);
+}
+
+// Errors from claim, release and starting an assessment.
+export function actionErrorMessage(error) {
+  switch (error?.status) {
+    case 0: return error.message;
+    case 401: return 'Your session could not be verified. Please sign in again.';
+    case 403: return 'Only the broker or underwriter assigned to this application can do this.';
+    case 404: return 'This application was not found, or you no longer have access to it.';
+    case 409: return 'This application changed in the meantime (for example, another broker claimed it). Reload it and try again.';
+    case 429: return 'Too many requests. Please wait a moment and try again.';
+    case 503: return 'The AI engine is not available right now. Please try again in a minute.';
+    default: return 'That did not work. Please try again.';
+  }
+}
+
 export const LOAN_STATUSES = ['Applied', 'AI Deliberated', 'Underwriter Approved', 'Funded', 'Closed'];
 export const RISK_TIERS = ['Low', 'Medium', 'High'];
 export const LTV_GROUPS = {

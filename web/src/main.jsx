@@ -1,4 +1,4 @@
-import React, {useEffect, useId, useMemo, useState} from 'react';
+import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {
   Home, FileText, Users, BarChart3, Settings, LogOut, Search, Bell,
@@ -14,7 +14,10 @@ import {authConfigurationError} from './firebase.js';
 import {LedgerView, BlockchainExplorer} from './ledger/LedgerView.jsx';
 import {signIn, observeSession, logoutUser, resetPassword} from './authAPI.js';
 import {authErrorMessage} from './authErrors.js';
-import {getMyProfile, profileErrorMessage, roleLabel, listLoanApplications, getLoanApplication, loanErrorMessage, LOAN_STATUSES, RISK_TIERS, LTV_GROUPS} from './api.js';
+import {getMyProfile, profileErrorMessage, roleLabel, listLoanApplications, getLoanApplication, loanErrorMessage, LOAN_STATUSES, RISK_TIERS, LTV_GROUPS,
+  claimLoanApplication, releaseLoanApplication, requestAssessment, getLatestAssessment, actionErrorMessage} from './api.js';
+import {canClaim, canRelease, canRunAssessment, isRunning, decisionTone, tallyVotes, agentLabel, providerLabel,
+  affordabilityRows, collateralRows, riskRows, riskFactors, breachedLimits} from './assessment/assessment.js';
 
 
 
@@ -129,8 +132,10 @@ function App(){
         {page==='dashboard' && <Dashboard setPage={setPage}/>} 
         {page==='pipeline' && <Pipeline role={profile.data?.role} query={pipelineQuery} setQuery={setPipelineQuery}
           onOpenApplication={id=>{setLoanId(id);setPage('loan');}}/>}
-        {page==='loan' && <LoanFile applicationId={loanId} currentUid={session.user.uid} onBack={()=>setPage('pipeline')}/>}
-        {page==='audit' && <Audit/>}
+        {page==='loan' && <LoanFile applicationId={loanId} currentUid={session.user.uid} role={profile.data?.role}
+          onBack={()=>setPage('pipeline')} onOpenAudit={()=>setPage('audit')}/>}
+        {page==='audit' && <AuditPage applicationId={loanId} currentUid={session.user.uid}
+          onOpenFile={()=>setPage('loan')} onOpenPipeline={()=>setPage('pipeline')}/>}
         {page==='stress' && <Stress scenario={scenario} setScenario={setScenario}/>} 
         {page==='decision' && <Decision decision={decision} setDecision={setDecision}/>} 
         {page==='ledger' && <BlockchainExplorer Hero={Hero}/>}
@@ -321,9 +326,10 @@ function Pipeline({role,query,setQuery,onOpenApplication}){
 }
 
 // One loan application from AL-Core (GET /api/v1/loan-applications/{id}).
-function LoanFile({applicationId,currentUid,onBack}){
+function LoanFile({applicationId,currentUid,role,onBack,onOpenAudit}){
   const [reloadKey,setReloadKey]=useState(0);
   const [result,setResult]=useState({loading:Boolean(applicationId),error:'',data:null});
+  const [action,setAction]=useState({pending:'',error:''});
 
   useEffect(()=>{
     if(!applicationId) return;
@@ -334,6 +340,24 @@ function LoanFile({applicationId,currentUid,onBack}){
       .catch(error=>{if(!cancelled) setResult({loading:false,error:loanErrorMessage(error,'The application could not be loaded. Please try again.'),data:null});});
     return ()=>{cancelled=true;};
   },[applicationId,reloadKey]);
+
+  // Re-reads the application without a loading screen, e.g. when an AI run moves it to "AI Deliberated".
+  function refreshApplication(){
+    getLoanApplication(applicationId).then(data=>setResult(current=>({...current,data}))).catch(()=>{});
+  }
+  const assessment=useLatestAssessment(applicationId,refreshApplication);
+
+  // Claim / return: AL-Core answers with the updated application.
+  async function runAction(kind,request){
+    setAction({pending:kind,error:''});
+    try {
+      const updated=await request(applicationId);
+      setResult(current=>({...current,data:updated}));
+      setAction({pending:'',error:''});
+    } catch(error){
+      setAction({pending:'',error:actionErrorMessage(error)});
+    }
+  }
 
   const backButton=<button className="secondary" onClick={onBack}><ArrowLeft size={16}/>Back to pipeline</button>;
   const hero=<Hero eyebrow="Loan review" title="Loan File / Collateral Assessment" subtitle="Review loan details, borrower finances, property data, and the application's progress." compact/>;
@@ -378,10 +402,7 @@ function LoanFile({applicationId,currentUid,onBack}){
         ['BER rating',p.ber||'Not provided'],
       ]}/></Card>
       <Card title="AI Assessment" icon={BrainCircuit}>
-        <span className={riskPillClass(a.riskTier)}>{a.riskTier?`${a.riskTier} risk`:'Not assessed'}</span>
-        <p className="sample-muted">{a.riskTier
-          ?'Risk tier from the AI engine assessment.'
-          :'The AI engine has not assessed this application yet. Its risk tier, valuation and agent deliberation will appear here once AL-Core runs the assessment.'}</p>
+        <AssessmentSummary application={a} uid={currentUid} assessment={assessment} onOpenAudit={onOpenAudit}/>
       </Card>
       <Card title="Assignment / Decision" icon={UserRoundCheck}>
         <KeyValueGrid data={[
@@ -392,6 +413,13 @@ function LoanFile({applicationId,currentUid,onBack}){
         ]}/>
         {a.decision&&<div className="callout"><strong>Reason</strong><p>{a.decision.reason}</p>
           {a.decision.conditions.length>0&&<ul>{a.decision.conditions.map(condition=><li key={condition}>{condition}</li>)}</ul>}</div>}
+        {(canClaim(a,role)||canRelease(a,currentUid))&&<div className="settings-action-buttons card-actions">
+          {canClaim(a,role)&&<button className="primary" disabled={!!action.pending} onClick={()=>runAction('claim',claimLoanApplication)}>
+            <UserRoundCheck size={16}/>{action.pending==='claim'?'Claiming...':'Claim application'}</button>}
+          {canRelease(a,currentUid)&&<button className="secondary" disabled={!!action.pending} onClick={()=>runAction('release',releaseLoanApplication)}>
+            <RotateCcw size={16}/>{action.pending==='release'?'Returning...':'Return to unclaimed'}</button>}
+        </div>}
+        {action.error&&<p className="auth-error" role="alert">{action.error}</p>}
       </Card>
     </section>
     <Card title="Status history" icon={Clock3}>
@@ -403,21 +431,194 @@ function LoanFile({applicationId,currentUid,onBack}){
   </>;
 }
 
-function Audit(){
+// Latest AI committee run for an application (GET .../assessments/latest). While it is queued or
+// running, the page asks again every few seconds: AL-Core checks the AI engine on each request.
+// onFinished runs once a run this page watched completes (the application's status has changed).
+const ASSESSMENT_POLL_MS=3000;
+function useLatestAssessment(applicationId,onFinished){
+  const [state,setState]=useState({loading:Boolean(applicationId),error:'',data:null});
+  const [starting,setStarting]=useState(false);
+  const [startError,setStartError]=useState('');
+  const [pollKey,setPollKey]=useState(0);
+  const lastStatus=useRef(null);
+  const onFinishedRef=useRef(onFinished);
+  onFinishedRef.current=onFinished;
+
+  useEffect(()=>{
+    if(!applicationId) return;
+    let cancelled=false;
+    let timer;
+    async function check(){
+      try {
+        const data=await getLatestAssessment(applicationId);
+        if(cancelled) return;
+        const wasRunning=isRunning({status:lastStatus.current});
+        lastStatus.current=data.status;
+        setState({loading:false,error:'',data});
+        if(isRunning(data)) timer=setTimeout(check,ASSESSMENT_POLL_MS);
+        else if(wasRunning) onFinishedRef.current?.(data);
+      } catch(error){
+        if(cancelled) return;
+        // The application itself loaded, so 404 here means it has never been assessed.
+        if(error?.status===404) setState({loading:false,error:'',data:null});
+        else setState(current=>({...current,loading:false,error:loanErrorMessage(error,'The AI assessment could not be loaded. Please try again.')}));
+      }
+    }
+    check();
+    return ()=>{cancelled=true;clearTimeout(timer);};
+  },[applicationId,pollKey]);
+
+  async function start(){
+    if(starting) return;
+    setStarting(true);setStartError('');
+    try {
+      const data=await requestAssessment(applicationId);
+      lastStatus.current=data.status;
+      setState({loading:false,error:'',data});
+    } catch(error){
+      setStartError(actionErrorMessage(error)); // a run the AI engine refused is saved as failed
+    } finally {
+      setStarting(false);
+      setPollKey(key=>key+1);
+    }
+  }
+  return {...state,starting,startError,start,reload:()=>setPollKey(key=>key+1)};
+}
+
+function AssessmentRunButton({application,uid,assessment}){
+  if(!canRunAssessment(application,uid)||assessment.loading||isRunning(assessment.data)) return null;
+  return <button className="primary" disabled={assessment.starting} onClick={assessment.start}>
+    <Play size={16}/>{assessment.starting?'Starting...':assessment.data?'Run again':'Run AI assessment'}</button>;
+}
+
+// The AI Assessment card on the Loan File.
+function AssessmentSummary({application,uid,assessment,onOpenAudit}){
+  const run=assessment.data;
+  const verdict=run?.decision?.decision;
+  const chance=run?.risk?.approval_chance_percent;
+  const message=assessment.loading?'Checking for an AI assessment...'
+    :isRunning(run)?'The AI committee is deliberating. This updates automatically.'
+    :run?.status==='failed'?'The last AI run failed. The AI audit has the technical details.'
+    :run?.status==='done'?`Finished ${formatDateTime(run.finishedAt)}${chance!=null?` · approval chance ${chance}%`:''}.`
+    :canRunAssessment(application,uid)?'Not assessed yet. Run the AI committee to get a recommendation, risk tier and reasoning.'
+    :'Not assessed yet. The assigned broker or underwriter can run the AI committee.';
   return <>
-    <Hero eyebrow="AI audit" title="AL-AI Audit & Deliberation Console" subtitle="Multi-agent analysis, reasoning, and final recommendation for transparent decisions." compact/>
-    <section className="agent-grid">{[
-      ['Credit Agent','Agree','Strong credit profile, stable income, low existing obligations.'],
-      ['Property Agent','Agree','Property condition and valuation support lending criteria.'],
-      ['Market Agent','Consider','Strong demand, but near-term supply warrants monitoring.'],
-      ['Risk Agent','Consider','Overall risk within appetite; additional reserves advised.']
-    ].map(([name,state,txt])=><Card key={name} title={name} icon={BrainCircuit}><span className={`pill ${state==='Agree'?'low':'medium'}`}>{state}</span><p>{txt}</p><button className="text-link">View full analysis <ChevronRight size={15}/></button></Card>)}</section>
+    <div className="assessment-status">
+      <span className={riskPillClass(application.riskTier)}>{application.riskTier?`${application.riskTier} risk`:'Not assessed'}</span>
+      {verdict&&<span className={`pill ${decisionTone(verdict)}`}>AI: {verdict}</span>}
+      {isRunning(run)&&<span className="pill neutral"><Clock3 size={13}/>Deliberating</span>}
+    </div>
+    <p className="sample-muted" role="status">{message}</p>
+    <div className="settings-action-buttons card-actions">
+      <AssessmentRunButton application={application} uid={uid} assessment={assessment}/>
+      {run&&<button className="secondary" onClick={onOpenAudit}><BrainCircuit size={16}/>Open AI audit</button>}
+    </div>
+    {assessment.startError&&<p className="auth-error" role="alert">{assessment.startError}</p>}
+    {assessment.error&&<p className="auth-error" role="alert">{assessment.error}</p>}
+  </>;
+}
+
+function FigureGrid({rows}){
+  return rows.length?<KeyValueGrid data={rows}/>:<p className="sample-muted">Not available for this run.</p>;
+}
+
+// AI Audit & Deliberation Console for the application chosen in the Pipeline.
+function AuditPage({applicationId,currentUid,onOpenFile,onOpenPipeline}){
+  const [reloadKey,setReloadKey]=useState(0);
+  const [app,setApp]=useState({loading:Boolean(applicationId),error:'',data:null});
+  useEffect(()=>{
+    if(!applicationId) return;
+    let cancelled=false;
+    setApp({loading:true,error:'',data:null});
+    getLoanApplication(applicationId)
+      .then(data=>{if(!cancelled) setApp({loading:false,error:'',data});})
+      .catch(error=>{if(!cancelled) setApp({loading:false,error:loanErrorMessage(error,'The application could not be loaded. Please try again.'),data:null});});
+    return ()=>{cancelled=true;};
+  },[applicationId,reloadKey]);
+  function refreshApplication(){
+    getLoanApplication(applicationId).then(data=>setApp(current=>({...current,data}))).catch(()=>{});
+  }
+  const assessment=useLatestAssessment(applicationId,refreshApplication);
+
+  const hero=<Hero eyebrow="AI audit" title="AL-AI Audit & Deliberation Console" subtitle="Multi-agent analysis, reasoning, and final recommendation for transparent decisions." compact/>;
+  if(!applicationId) return <>{hero}<Card><div className="empty" role="status">
+    <p>Choose an application in the Loan Pipeline to see the AI committee's reasoning.</p>
+    <div className="settings-action-buttons"><button className="secondary" onClick={onOpenPipeline}><ArrowLeft size={16}/>Go to the pipeline</button></div>
+  </div></Card></>;
+  if(app.loading||app.error||assessment.loading) return <>{hero}<Card><div className="empty" role={app.error?'alert':'status'}>
+    <p>{app.error||'Loading the AI assessment...'}</p>
+    {app.error&&<div className="settings-action-buttons"><button className="secondary" onClick={()=>setReloadKey(key=>key+1)}><RotateCcw size={16}/>Try again</button></div>}
+  </div></Card></>;
+
+  const a=app.data;
+  const run=assessment.data;
+  const header=<div className="loan-header card">
+    <div><strong title={a.loanApplicationId}>{a.loanApplicationId.slice(0,8)}</strong>
+      <span>{[a.borrowerFullName,a.propertySpec.county,euro(a.loanAmount)].filter(Boolean).join(' · ')}</span></div>
+    <span className="pill neutral">{a.status}</span>
+    <div className="loan-header-actions"><button className="secondary" onClick={onOpenFile}><ArrowLeft size={16}/>Back to loan file</button></div>
+  </div>;
+  const runControls=<>
+    <div className="settings-action-buttons card-actions"><AssessmentRunButton application={a} uid={currentUid} assessment={assessment}/></div>
+    {assessment.startError&&<p className="auth-error" role="alert">{assessment.startError}</p>}
+    {assessment.error&&<p className="auth-error" role="alert">{assessment.error} <button className="text-link" onClick={assessment.reload}>Try again</button></p>}
+  </>;
+
+  if(!run||run.status!=='done'||!run.decision) return <>{hero}{header}
+    <Card title="AI committee" icon={BrainCircuit}>
+      <p role="status">{!run
+        ?(canRunAssessment(a,currentUid)?'This application has not been assessed yet. Run the AI committee to see its recommendation and reasoning.'
+          :'This application has not been assessed yet. The assigned broker or underwriter can run the AI committee.')
+        :isRunning(run)?'The AI committee is deliberating. This page updates automatically every few seconds.'
+        :run.status==='failed'?`The last run failed${run.error?`: ${run.error}`:'.'}`
+        :'The run finished without a recommendation.'}</p>
+      {runControls}
+    </Card>
+  </>;
+
+  const verdict=run.decision;
+  const tally=tallyVotes(verdict.votes);
+  const limits=breachedLimits(run);
+  const factors=riskFactors(run.risk);
+  const VerdictIcon={Approve:CircleCheckBig,Decline:CircleX,'Conditionally Approve':ClipboardCheck}[verdict.decision]||AlertTriangle;
+  return <>
+    {hero}{header}
     <section className="two-col-grid">
-      <Card title="Agent Consensus" icon={Users}><Donut value={75} label="agreement" segments={[50,25,0,25]}/><div className="legend-list"><span><i className="legend green"/>Agree 2</span><span><i className="legend amber"/>Consider 1</span><span><i className="legend grey"/>No opinion 1</span></div></Card>
-      <Card title="AI Recommendation" icon={Sparkles}><div className="recommendation"><CircleCheckBig/><div><span className="eyebrow">Recommendation</span><h3>Approve with Conditions</h3><p>Core lending criteria are met with manageable risk and clear conditions.</p></div></div><div className="mini-stats three"><div><strong>92%</strong><span>Confidence</span></div><div><strong>Moderate</strong><span>Risk rating</span></div><div><strong>3</strong><span>Conditions</span></div></div></Card>
+      <Card title="AI Recommendation" icon={Sparkles}>
+        <div className="recommendation"><VerdictIcon/><div><span className="eyebrow">Recommendation</span><h3>{verdict.decision}</h3>{verdict.reason&&<p>{verdict.reason}</p>}</div></div>
+        {verdict.automatic&&<p className="sample-muted">Declined automatically: a hard lending limit was broken, so the AI models were not asked.</p>}
+        {verdict.conditions.length>0&&<div className="callout"><strong>Conditions</strong><ul>{verdict.conditions.map((item,index)=><li key={index}>{item}</li>)}</ul></div>}
+        {verdict.keyRisks.length>0&&<div className="callout"><strong>Key risks</strong><ul>{verdict.keyRisks.map((item,index)=><li key={index}>{item}</li>)}</ul></div>}
+        {runControls}
+      </Card>
+      <Card title="Committee votes" icon={Users}>
+        {verdict.votes.length?<>
+          <p className="sample-muted">{Object.entries(tally).map(([decision,count])=>`${count} × ${decision}`).join(' · ')}</p>
+          <ul className="vote-list">{verdict.votes.map((vote,index)=><li key={`${vote.provider}-${index}`}>
+            <strong>{providerLabel(vote.provider)}</strong>
+            <span className={`pill ${decisionTone(vote.decision)}`}>{vote.decision||'Unavailable'}</span>
+            <span>{vote.reason||'No answer from this model.'}</span>
+          </li>)}</ul>
+        </>:<p className="sample-muted">{verdict.automatic?'No votes: the application was declined automatically.':'No AI model returned a vote.'}</p>}
+      </Card>
     </section>
-    <Card title="Reasoning / Decision Trail" icon={FileText}><Timeline/></Card>
-  </>
+    <section className="three-col-grid">
+      <Card title="Affordability" icon={WalletCards}><FigureGrid rows={affordabilityRows(run.affordability)}/></Card>
+      <Card title="Collateral" icon={Building2}><FigureGrid rows={collateralRows(run.collateral)}/></Card>
+      <Card title="Risk" icon={ShieldCheck}><FigureGrid rows={riskRows(run.risk)}/>
+        {factors.length>0&&<ul className="factor-list">{factors.map(factor=><li key={factor.label}>
+          <span>{factor.label}</span><strong>{factor.value}</strong><small>{factor.points} pts</small>
+        </li>)}</ul>}
+      </Card>
+    </section>
+    {limits.length>0&&<Card title="Lending limits broken" icon={AlertTriangle}><ul className="limit-list">{limits.map(limit=><li key={limit}>{limit}</li>)}</ul></Card>}
+    <Card title="Reasoning / Decision Trail" icon={FileText}>
+      {run.steps.length?<ol className="timeline status-history">{run.steps.map(step=><li key={step.stepNumber}>
+        <time>Step {step.stepNumber}</time><strong>{agentLabel(step.agent)}</strong><span>{step.summary}</span>
+      </li>)}</ol>:<p className="sample-muted">No reasoning steps were recorded for this run.</p>}
+      <p className="sample-muted audit-footnote">Finished {formatDateTime(run.finishedAt)} · interest rate used {run.ratePercent}%</p>
+    </Card>
+  </>;
 }
 
 function Stress({scenario,setScenario}){
@@ -492,7 +693,6 @@ function LineChartFlat({base,stressed}){
     <div className="chart-legend"><span><i className="legend green"/>Base case</span><span><i className="legend sage"/>Stress scenario</span></div>
   </div>;
 }
-function Timeline(){const rows=[['10:12','Credit Agent','Completed borrower and financial analysis.'],['10:15','Property Agent','Validated property details and appraisal.'],['10:18','Market Agent','Reviewed market conditions and supply.'],['10:22','Risk Agent','Identified moderate risk and proposed conditions.'],['10:25','AI Synthesis','Recommended approval with conditions.']]; return <ol className="timeline">{rows.map(([t,a,b])=><li key={t+a}><time>{t}</time><strong>{a}</strong><span>{b}</span></li>)}</ol>}
 const sampleBrokers = [
   {name:'BrightPath Capital',contact:'Emma Walsh',city:'Cork',loans:12,volume:2480000,approval:83,status:'Active',email:'emma@brightpath.example'},
   {name:'Greenfield Partners',contact:'Conor Murphy',city:'Dublin',loans:10,volume:1920000,approval:80,status:'Active',email:'conor@greenfield.example'},

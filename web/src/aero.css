@@ -322,3 +322,16 @@ html[data-reduce-motion="true"], html[data-reduce-motion="true"] *, html[data-re
 .empty .settings-action-buttons { justify-content: center; }
 .status-history li { grid-template-columns: 175px 170px 1fr; }
 .status-history li::before { left: 160px; }
+
+/* AI assessment (Loan File) and AI Audit */
+.card-actions { margin-top: 14px; }
+.card-actions:empty { display: none; }
+.assessment-status { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.assessment-status .pill { display: inline-flex; align-items: center; gap: 4px; }
+.vote-list, .factor-list, .limit-list { list-style: none; padding: 0; margin: 8px 0 0; }
+.vote-list li { display: grid; grid-template-columns: 120px auto 1fr; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.factor-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.factor-list small { color: var(--muted); }
+.limit-list li { padding: 6px 0; color: #9b2c2c; }
+.audit-footnote { margin-top: 12px; }
+@media (max-width: 720px) { .vote-list li { grid-template-columns: 1fr; } }
