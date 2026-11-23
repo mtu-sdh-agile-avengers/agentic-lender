@@ -11,10 +11,12 @@ import {
   SkipForward,
 } from 'lucide-react';
 import {
-  MAIN_PATH, TRANSITION_ACTORS, ZERO_HASH, buildLedger, documentOf, fingerprint, rewriteBlock,
-  shortHash, stateMap, verifyBlocks,
+  ZERO_HASH, buildLedger, documentOf, fingerprint, rewriteBlock,
+  shortHash, verifyBlocks,
 } from './ledger.js';
 import {SAMPLE_APPLICATION, SAMPLE_STEPS} from './sample.js';
+import {BlockchainStages} from './BlockchainStages.jsx';
+import {stagesFromLedger} from './stages.js';
 import './ledger.css';
 
 const STEP_MS = 900;
@@ -82,42 +84,6 @@ function useScramble(value, duration = 600) {
 function HashText({value}) {
   const shown = useScramble(value === ZERO_HASH ? '0x0000…0000' : shortHash(value));
   return <code className="lg-hashtext" title={value}>{shown}</code>;
-}
-
-// ---------------------------------------------------------------------------
-// The track: the loan's token moving through the states AL-Core allows
-// ---------------------------------------------------------------------------
-export function TokenTrack({history, headHash}) {
-  const {visited, current, next} = stateMap(history);
-  const closed = current === 'Closed';
-  const lastOnLine = [...visited].reverse().find((state) => MAIN_PATH.includes(state));
-  const position = lastOnLine ? MAIN_PATH.indexOf(lastOnLine) : -1;
-  const at = (i) => (i / (MAIN_PATH.length - 1)) * 100;
-
-  return <div className="lg-track" role="img"
-    aria-label={`The loan is ${current ? `at ${current}` : 'not submitted yet'}. It can move to: ${next.join(' or ') || 'nothing, it is closed'}.`}>
-    <div className="lg-rail" aria-hidden="true">
-      <div className="lg-rail-fill" style={{width: `${position < 0 ? 0 : at(position)}%`}}/>
-      {MAIN_PATH.slice(1).map((state, i) => <span key={state} className={`lg-rail-label ${visited.includes(state) ? 'done' : ''}`}
-        style={{left: `${(at(i) + at(i + 1)) / 2}%`}}>{TRANSITION_ACTORS[`${MAIN_PATH[i]}>${state}`]}</span>)}
-      {MAIN_PATH.map((state, i) => {
-        const status = state === current ? 'current' : visited.includes(state) ? 'done' : next.includes(state) ? 'next' : 'todo';
-        return <div key={state} className={`lg-station ${status} ${closed && !visited.includes(state) ? 'faded' : ''}`} style={{left: `${at(i)}%`}}>
-          <span className="lg-station-dot">{status === 'done' && <CircleCheckBig size={12}/>}</span>
-          <strong>{state}</strong>
-          {status === 'next' && <small>possible next</small>}
-        </div>;
-      })}
-      {position >= 0 && <div className={`lg-token ${closed ? 'closed' : ''}`} style={{left: `${at(position)}%`}}>
-        <Seal hash={headHash} size={34}/>
-      </div>}
-    </div>
-    <div className={`lg-exit ${closed ? 'current' : next.includes('Closed') ? 'next' : ''}`}>
-      <span className="lg-exit-line" aria-hidden="true"/>
-      <span className="lg-exit-station"><strong>Closed</strong>
-        <small>{closed ? 'the loan ended here' : 'withdrawn, declined or repaid, from any open state'}</small></span>
-    </div>
-  </div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +230,7 @@ function TamperPanel({application, blocks, mode, setMode, edits, setEdits, rewri
 // ---------------------------------------------------------------------------
 // The record of one application
 // ---------------------------------------------------------------------------
-export function LedgerView({application, history: historyProp, title = 'Blockchain record', controls = true}) {
+export function LedgerView({application, history: historyProp, title = 'Blockchain record', controls = true, onRetry, sceneHeight = 440}) {
   const history = historyProp ?? application.statusHistory ?? [];
   const [ledger, setLedger] = useState(null);
   const [error, setError] = useState('');
@@ -335,8 +301,13 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
   const recordOk = view.documentHash === ledger.documentHash;
   const allGood = chainOk && recordOk;
   const shownBlocks = view.blocks.slice(0, revealed);
-  const head = shownBlocks[shownBlocks.length - 1];
   const dirty = Object.keys(edits).length > 0 || Boolean(rewrite.time);
+  const stages = stagesFromLedger({
+    history: history.slice(0, revealed),
+    application,
+    verdicts: view.verdicts.slice(0, revealed),
+    blocks: view.blocks,
+  });
 
   return <section className="card lg-card">
     <header className="lg-head">
@@ -348,7 +319,7 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
       {controls && <button className="primary" onClick={replay} disabled={replaying}><Play size={16}/>{replaying ? 'Replaying…' : 'Replay history'}</button>}
     </header>
 
-    <TokenTrack history={history.slice(0, revealed)} headHash={head?.hash}/>
+    <BlockchainStages stages={stages} height={sceneHeight} onRetry={dirty ? reset : onRetry}/>
     <Chain blocks={view.blocks} verdicts={view.verdicts} revealed={revealed} rewrittenIndex={rewrittenIndex} animateFrom={animateFrom}/>
 
     {replaying ? <div className="lg-verdict busy" role="status" aria-live="polite">
@@ -375,11 +346,24 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
 // ---------------------------------------------------------------------------
 const AUTOPLAY_MS = 3400;
 
+// the same sample, declined by the underwriter after the AI assessment
+const DECLINED_HISTORY = [
+  ...SAMPLE_APPLICATION.statusHistory.slice(0, 2),
+  {status: 'Closed', changedById: SAMPLE_APPLICATION.bankOfficerId, changedAt: SAMPLE_APPLICATION.statusHistory[2].changedAt},
+];
+const DECLINED_APPLICATION = {
+  ...SAMPLE_APPLICATION,
+  status: 'Closed',
+  decision: {...SAMPLE_APPLICATION.decision, outcome: 'Declined', reason: 'Stressed repayments too close to the 40% limit.', conditions: []},
+};
+
 export function BlockchainExplorer({Hero}) {
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [declined, setDeclined] = useState(false);
   const last = SAMPLE_STEPS.length - 1;
-  const history = useMemo(() => SAMPLE_APPLICATION.statusHistory.slice(0, step + 1), [step]);
+  const history = useMemo(() => (declined ? DECLINED_HISTORY : SAMPLE_APPLICATION.statusHistory.slice(0, step + 1)), [step, declined]);
+  const application = declined ? DECLINED_APPLICATION : SAMPLE_APPLICATION;
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -388,7 +372,7 @@ export function BlockchainExplorer({Hero}) {
     return () => clearTimeout(id);
   }, [playing, step, last]);
 
-  const go = (target) => { setPlaying(false); setStep(Math.max(0, Math.min(last, target))); };
+  const go = (target) => { setPlaying(false); setDeclined(false); setStep(Math.max(0, Math.min(last, target))); };
 
   return <>
     {Hero && <Hero eyebrow="Blockchain" title="How a loan becomes a tamper-proof record" subtitle="Follow one application from the first click to the payout, and see what the chain keeps at every step." compact/>}
@@ -414,9 +398,15 @@ export function BlockchainExplorer({Hero}) {
             </div>}
           </li>)}
         </ol>
-        <p className="lg-story-foot">{step === last ? 'Now try to change it: the controls are under the chain.' : 'A made-up application, for demonstration.'}</p>
+        <button className="secondary lg-what-if" onClick={() => { setPlaying(false); setDeclined((d) => !d); }} aria-pressed={declined}>
+          {declined ? 'Back to the approved loan' : 'What if the underwriter declines?'}
+        </button>
+        <p className="lg-story-foot">{declined
+          ? 'The chain breaks at the decision. Retry brings the approved story back.'
+          : step === last ? 'Now try to change it: the controls are under the chain.' : 'A made-up application, for demonstration.'}</p>
       </aside>
-      <LedgerView application={SAMPLE_APPLICATION} history={history} title="Sample loan" controls={step === last && !playing}/>
+      <LedgerView application={application} history={history} title="Sample loan" controls={(step === last || declined) && !playing}
+        onRetry={declined ? () => setDeclined(false) : undefined} sceneHeight={480}/>
     </div>
   </>;
 }
