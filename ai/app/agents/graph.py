@@ -6,10 +6,9 @@
 (auto_decline: a hard limit is breached, no model is called.)
 
 Each node is a plain function that receives the shared state and returns the
-keys it wants to add. Affordability, valuation and risk are deterministic
-Python; only the strategist calls a language model. Market and strategist
-are filled in by ALG4-83 and ALG4-84; here they are wired and working but
-minimal.
+keys it wants to add. Affordability (ALG4-81), valuation (ALG4-82) and risk
+are deterministic Python; market (ALG4-83) reads ECB statistics; only the
+strategist calls a language model.
 """
 
 import json
@@ -22,6 +21,8 @@ from langgraph.graph import END, StateGraph
 from app.agents.risk import assess_risk
 from app.agents.state import CommitteeState
 from app.agents.tools import assess_affordability, assess_collateral
+from app.services.market import MarketSource, default_market_source
+from app.services.market import unavailable as market_unavailable
 
 logger = logging.getLogger(__name__)
 
@@ -91,21 +92,60 @@ def valuation_node(
     }
 
 
-def market_node(state: CommitteeState) -> CommitteeState:
-    """ALG4-83 placeholder: external rate and market research goes here.
+def market_node(
+    state: CommitteeState, *, market: MarketSource | None = None
+) -> CommitteeState:
+    """ALG4-83. Current ECB rates and the mortgage benchmark (services/market.py).
 
-    Returns a clearly marked stub so the graph runs end to end and AL-Web can
-    already render the section.
+    Never fails the run: without the ECB the snapshot says `available: false`
+    and the strategist decides on the calculators alone.
     """
-    result = {
-        "ecb_base_rate_percent": None,
-        "trend": "unknown",
-        "sources": [],
-        "stub": True,
-    }
+    started = time.perf_counter()
+    try:
+        source = market or default_market_source()
+        snapshot = source(state["application"].get("rate_percent"))
+    except Exception as exc:  # a research outage must not stop the committee
+        logger.warning("market research failed: %s", exc)
+        snapshot = market_unavailable(f"{type(exc).__name__}: {exc}"[:200])
+
     return {
-        "market": result,
-        "trail": _step("market", "stub: external research not implemented yet"),
+        "market": snapshot.model_dump(),
+        "trail": _step(
+            "market",
+            _market_summary(snapshot),
+            seconds=round(time.perf_counter() - started, 2),
+        ),
+    }
+
+
+def _market_summary(snapshot) -> str:
+    if not snapshot.available:
+        reason = snapshot.errors[0] if snapshot.errors else "no data"
+        return f"market data unavailable ({reason})"
+    parts = []
+    if snapshot.ecb_deposit_rate:
+        parts.append(f"ECB deposit {snapshot.ecb_deposit_rate.value_percent:.2f}%")
+    if snapshot.euribor_3m:
+        trend = f" ({snapshot.euribor_3m.trend})" if snapshot.euribor_3m.trend else ""
+        parts.append(f"Euribor 3M {snapshot.euribor_3m.value_percent:.2f}%{trend}")
+    if snapshot.mortgage_rate:
+        parts.append(
+            f"new mortgages {snapshot.mortgage_rate.value_percent:.2f}% "
+            f"({snapshot.mortgage_area})"
+        )
+    if snapshot.offered_vs_market_points is not None:
+        parts.append(f"offered {snapshot.offered_vs_market_points:+.2f} pts vs market")
+    return ", ".join(parts)
+
+
+def _market_for_prompt(market: dict[str, Any]) -> dict[str, Any]:
+    """Only the facts, not the source URLs: keeps the prompt short."""
+    if not market:
+        return {}
+    return {
+        "available": market.get("available", False),
+        "facts": market.get("observations", []),
+        "offered_vs_market_points": market.get("offered_vs_market_points"),
     }
 
 
@@ -151,7 +191,7 @@ def strategist_node(
     prompt = STRATEGIST_PROMPT.format(
         affordability=json.dumps(state["affordability"]),
         valuation=json.dumps(state["valuation"]),
-        market=json.dumps(state.get("market", {})),
+        market=json.dumps(_market_for_prompt(state.get("market", {}))),
     )
 
     started = time.perf_counter()
@@ -191,7 +231,7 @@ def _vote_for_decision(state: CommitteeState, providers) -> CommitteeState:
     prompt = STRATEGIST_PROMPT.format(
         affordability=json.dumps(state["affordability"]),
         valuation=json.dumps(state["valuation"]),
-        market=json.dumps(state.get("market", {})),
+        market=json.dumps(_market_for_prompt(state.get("market", {}))),
     )
 
     outcome = vote(prompt, providers)
@@ -255,10 +295,16 @@ def route_after_affordability(state: CommitteeState) -> str:
     return "auto_decline" if state["affordability"]["breaches"] else "valuation"
 
 
-def build_committee(model_bundle: dict | None = None, llm=None, providers=None):
+def build_committee(
+    model_bundle: dict | None = None,
+    llm=None,
+    providers=None,
+    market: MarketSource | None = None,
+):
     """Compile the graph. Dependencies are injected so tests can pass fakes.
 
     Pass `providers` for multi-model voting, or `llm` for a single model.
+    `market` replaces the ECB-backed market research (tests, offline demos).
     """
     graph = StateGraph(CommitteeState)
 
@@ -266,7 +312,7 @@ def build_committee(model_bundle: dict | None = None, llm=None, providers=None):
     graph.add_node(
         "valuation", lambda state: valuation_node(state, model_bundle=model_bundle)
     )
-    graph.add_node("market", market_node)
+    graph.add_node("market", lambda state: market_node(state, market=market))
     graph.add_node(
         "strategist", lambda state: strategist_node(state, llm=llm, providers=providers)
     )

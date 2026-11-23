@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 
 from app.config import get_settings
-from app.routers import deliberations, health, risk, valuations
+from app.routers import deliberations, health, market, risk, valuations
 from app.services.model_loader import load_model
 
 settings = get_settings()
@@ -67,6 +67,7 @@ app.include_router(health.router)
 app.include_router(valuations.router)
 app.include_router(deliberations.router)
 app.include_router(risk.router)
+app.include_router(market.router)
 
 
 @app.exception_handler(Exception)

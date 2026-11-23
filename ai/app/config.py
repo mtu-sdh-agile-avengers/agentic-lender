@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # service
     service_name: str = "al-ai-engine"
-    version: str = "0.2.0"
+    version: str = "0.3.0"
     environment: str = "development"
     log_level: str = "INFO"
 
@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     gemini_model: str = ""
     ollama_model: str = "llama3.2"
     ollama_url: str = "http://localhost:11434"
+
+    # Market & macro research (ALG4-83): ECB Data Portal, no key needed
+    market_data_enabled: bool = True
+    ecb_api_url: str = "https://data-api.ecb.europa.eu/service"
+    market_timeout_seconds: float = 5.0
+    market_cache_hours: float = 6.0
 
 
 @lru_cache
