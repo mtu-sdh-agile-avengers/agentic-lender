@@ -1,26 +1,26 @@
 import datetime
-from typing import Self, ClassVar
+from typing import ClassVar, Self
 
 from pydantic import BaseModel, Field
 
 from src.auth.enums import UserRole
-from src.utils import _get_utc_now
 from src.loan_applications import calculations
 from src.loan_applications.enums import (
-    County,
-    PropertyType,
     BerRating,
-    UnderwritingOutcome,
-    LtvGroup,
+    County,
     LoanApplicationStatus,
+    LtvGroup,
+    PropertyType,
     RiskTier,
+    UnderwritingOutcome,
 )
 from src.loan_applications.exceptions import (
-    LoanApplicationStatusChangeError,
-    LoanApplicationIsNotOpenError,
-    LoanApplicationAssigneeAlreadySetError,
     LoanApplicationAccessError,
+    LoanApplicationAssigneeAlreadySetError,
+    LoanApplicationIsNotOpenError,
+    LoanApplicationStatusChangeError,
 )
+from src.utils import _get_utc_now
 
 
 class UserInfoModel(BaseModel):
@@ -366,7 +366,7 @@ class LoanApplicationModel(BaseModel):
             LoanApplicationStatusChangeError: if the loan application status is not in `_OPEN_STATUSES`.
         """
         if self.status not in self._OPEN_STATUSES:
-            raise LoanApplicationIsNotOpenError(self.status)
+            raise LoanApplicationIsNotOpenError(self.loan_application_id, self.status)
 
     def _ensure_assignee(self, assignee_id: str | None, passed_id: str) -> None:
         """Ensures that passed user id is a real assignee (mortgage broker / underwriting bank officer).

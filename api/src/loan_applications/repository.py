@@ -1,14 +1,16 @@
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from google.cloud.firestore import (
+    AsyncTransaction,
     FieldFilter,
     Query,
-    AsyncTransaction,
     async_transactional,
 )
 
 from src.enums import CollectionPath
 from src.firebase.repository import FirestoreRepository
+from src.loan_applications.enums import LoanApplicationStatus
 from src.loan_applications.exceptions import LoanApplicationNotFoundError
 from src.loan_applications.models import LoanApplicationModel
 from src.loan_applications.ports import LoanApplicationQuery
@@ -116,3 +118,31 @@ class LoanApplicationFirestoreRepository(FirestoreRepository[LoanApplicationMode
             query_filters.append(("broker_id", None))
 
         return query_filters
+
+    async def get_loan_applications_by_ids(
+        self, application_ids: list[str]
+    ) -> dict[str, LoanApplicationModel]:
+        return await self._get_many(application_ids)
+
+    async def get_portfolio(
+        self,
+        *,
+        statuses: set[LoanApplicationStatus],
+        broker_id: str | None = None,
+        bank_officer_id: str | None = None,
+        limit: int,
+    ) -> list[LoanApplicationModel]:
+        """Returns up to `limit` applications with one of `statuses`, optionally of one broker / bank officer."""
+        query = self._col_ref.where(
+            filter=FieldFilter("status", "in", sorted(s.value for s in statuses))
+        )
+
+        if broker_id is not None:
+            query = query.where(filter=FieldFilter("broker_id", "==", broker_id))
+
+        if bank_officer_id is not None:
+            query = query.where(
+                filter=FieldFilter("bank_officer_id", "==", bank_officer_id)
+            )
+
+        return await self._stream(query.limit(limit))

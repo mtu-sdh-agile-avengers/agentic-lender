@@ -1,25 +1,23 @@
 from typing import Annotated
 
-from fastapi import APIRouter, status, Request
-from fastapi.params import Query, Depends
+from fastapi import APIRouter, Request, status
+from fastapi.params import Query
 
-from src.auth.enums import UserRole
-from src.loan_applications.v1.schemas import (
-    BankOfficerAssignBody,
-    UnderwritingDecisionCreateBody,
-)
 from src.auth.dependencies import (
-    BorrowerDep,
     AnyRoleDep,
-    BrokerDep,
     BankOfficerDep,
+    BorrowerDep,
+    BrokerDep,
     BrokerOrBankOfficerDep,
 )
+from src.auth.enums import UserRole
 from src.loan_applications.dependencies import LoanApplicationServiceDep
 from src.loan_applications.v1.schemas import (
-    LoanApplicationResponse,
+    BankOfficerAssignBody,
     LoanApplicationCreateBody,
     LoanApplicationFilterQuery,
+    LoanApplicationResponse,
+    UnderwritingDecisionCreateBody,
 )
 from src.rate_limiting import limiter
 from src.schemas import PaginatedResponse
@@ -35,7 +33,7 @@ router = APIRouter(
     "",
     response_model=LoanApplicationResponse,
     status_code=status.HTTP_201_CREATED,
-    description="Submits a new loan application (retail borrower)."
+    description="Submits a new loan application (retail borrower).",
 )
 @limiter.limit("5/minute")
 async def submit_loan_application(

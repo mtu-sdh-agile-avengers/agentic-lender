@@ -248,7 +248,7 @@ classDiagram
 
   conversations "1..1" *-- "0..*" messages
   conversations "0..*" --> "1..1" loan_applications : loan_application_id
-  conversations "0..*" --> "2..3" users : participant_ids
+  conversations "0..*" --> "2..2" users : participant_ids
   messages "0..*" --> "1..1" users : sender_id
 
   stress_tests "0..*" --> "1..1" users : user_id
@@ -318,7 +318,7 @@ final decision.
 | status                 | LoanApplicationStatus       | x   | core    | Current application status: `applied`, `AI deliberated`, `underwriter approved`, `funded`, `closed`              |
 | status_history         | dict[]                      | x   | core    | Application status history; updated on change                                                                    |
 | assessment_id          | str                         | ?   | core    | ID of the latest related document in assesments (see [assessments](#assessments))                                |
-| risk_tier              | RiskTier                    | ?   | ai      |  `Low`, `Medium`, `High`; derived from the latest assessment for filtering; null until assessed                  |
+| risk_tier              | RiskTier                    | ?   | ai      |  `low`, `medium`, `high`; derived from the latest assessment for filtering; null until assessed                  |
 | decision               | dict                        | ?   | client  | Underwriting officer final decision; null until made                                                             |
 | created_at             | datetime                    | x   | core    | Application creation time stamp                                                                                  |
 | updated_at             | datetime                    | x   | core    | Application details modification time stamp                                                                      |
@@ -516,10 +516,8 @@ Decision details of the AI committee, including votes of each model.
 | automatic  | bool       | x   | ai     | `True` only if declined automatically (exceed hard coded limits)                    |
 | votes      | Vote[]     | x   | ai     | Decision of each separate agent, majority wins; empty if `automatic` is `True`      |
 
-> [!NOTE]
-> AL-AI Engine provides the risk tier: instantly from `POST /v1/risk-assessments` (no language model, use it on submission)
-> and as `result.risk` of a committee run. `risk.tier` has the same values as `RiskTier`; `risk.approval_chance_percent`
-> is the estimated chance of approval. See [docs/ai/risk-assessment.md](../ai/risk-assessment.md).
+> [!WARNING]
+> AL-AI Engine is not yet providing risk_tier for the loan application, but it will be included in the future.
 
 ###### votes
 
@@ -688,7 +686,7 @@ the interest rate (+100 to +300 bps) and/or property prices fall. Created by AL-
 | created_at           | datetime        | x   | core   | Payment creation time stamp                                                                                                               |
 
 > [!WARNING]
-> If `statues` are used then "portfolio-wide" stress test is ran, but there is one simplification, We assume that a single bank underwriting officer represents the bank and that, for him, 
+> If `statuses` are used then "portfolio-wide" stress test is ran, but there is one simplification, We assume that a single bank underwriting officer represents the bank and that, for him, 
 the "portfolio" consists of all the loan applications with which he is related to.
 
 #### results

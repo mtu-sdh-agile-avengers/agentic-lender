@@ -12,6 +12,10 @@ class FirebaseAuthGateway:
         custom_claims["role"] = role.value
         await run_in_threadpool(auth.set_custom_user_claims, uid, custom_claims)
 
-    async def get_user_account(self, uid: str) -> AuthUserModel: ...    # not required, since account could be obtained using Firebase Auth SDK, may be implemented in future
+    async def get_user_account(
+        self, uid: str
+    ) -> AuthUserModel: ...  # not required, since account could be obtained using Firebase Auth SDK, may be implemented in future
 
-    async def add_user_account(self, user: AuthUserModel) -> None: ...  # creation of the account using FirebaseAdminSDK is not required
+    async def add_user_account(
+        self, user: AuthUserModel
+    ) -> None: ...  # creation of the account using FirebaseAdminSDK is not required
