@@ -9,37 +9,45 @@ states, so brokers, underwriters and auditors can see why the record cannot be q
 
 ## Where to find it
 
-- **Loan File:** every application has a *Blockchain ledger* section, built from its real
-  status history in AL-Core. **Replay** rebuilds the chain block by block.
-- **Blockchain** (sidebar): a step-by-step explorer that walks a sample application through
-  Applied → AI Deliberated → Underwriter Approved → Funded, explaining what happens in the app
-  and on the chain at each step. Good for demos and presentations.
+- **Loan File:** every application has a *Blockchain record* section, built from its real
+  status history in AL-Core. **Replay history** seals the blocks again one by one.
+- **Blockchain** (sidebar): the story of a sample application from submission to payout. Each
+  step explains what happens in the app and what the chain keeps. **Play the story** runs it
+  on its own, which works well in a presentation.
 
 ## What it shows
 
-1. **State machine:** the same transitions AL-Core enforces (`LoanApplicationModel`): done,
-   current and possible next states, and the exit to Closed from any open state.
-2. **Chain of blocks:** one block per status change with the state, time, the actor's *role*,
-   the fingerprint of the application record (and of the decision, in the block that records
-   it), the previous block's hash and its own hash. The coloured bars come from the first bytes
-   of each hash, so different hashes look different at a glance.
-3. **Off-chain vs on-chain:** the full record (names, income, amounts) stays in Firestore;
-   only SHA-256 fingerprints, the application ID, state and time go on chain. No personal data
-   on chain, which is how a bank would stay GDPR-compliant.
-4. **Tamper test:**
-   - *Change the record:* edit the loan amount or income; the record's fingerprint no longer
-     matches the one on chain.
-   - *Rewrite history:* change when a block happened and recompute its hash like a forger
-     would; the next block still points at the old hash, so the link breaks.
+1. **The track:** the loan's token moves through the states AL-Core allows (Applied, AI
+   Deliberated, Underwriter Approved, Funded), with who moves it at each step and the exit to
+   Closed from any open state.
+2. **Sealed blocks:** one block per status change. Each block gets a **seal drawn from its
+   own SHA-256 hash**: the same hash always gives the same seal, a different hash a visibly
+   different one. A block keeps the fingerprint of the record (and of the decision, in the
+   block that records it), the previous block's hash and its own. Threads tie each seal to
+   the one before it.
+3. **What the chain keeps:** the full record (names, income, amounts) stays in Firestore; the
+   chain only keeps its fingerprint, shown as a seal next to the record's current seal.
+4. **Try to change it:**
+   - *Edit the record* (or *Add €1 to the loan*): the record's seal changes completely and
+     about 60 of the 64 hex characters differ, so the change is obvious.
+   - *Rewrite a block* (or *Back-date it*): the forger re-seals that block, but the next block
+     still carries the old seal, so the thread snaps there.
 
-![Tamper test: the chain breaks after a rewritten block](../imgs/blockchain-ledger-tamper.png)
+![The record's seal before and after adding €1](../imgs/blockchain-ledger-seals.png)
+
+![A rewritten block breaks the chain](../imgs/blockchain-ledger-tamper.png)
+
+Motion is used where it explains something: seals stamp in when a block is written, threads
+draw, the token glides to the new state, hashes visibly compute when the data changes. With
+*reduce motion* turned on in the system settings everything appears in its final state.
 
 ## How it works
 
 - `web/src/ledger/ledger.js`: canonical JSON (sorted keys) → SHA-256 with the browser's Web
   Crypto API; blocks, links and verification. Covered by `npm test` (Node's built-in test
   runner, also run in CI).
-- `web/src/ledger/LedgerView.jsx`: `LedgerView` (Loan File) and `BlockchainExplorer` (page).
+- `web/src/ledger/LedgerView.jsx`: `LedgerView` (Loan File), `BlockchainExplorer` (page) and
+  `Seal`, the generative seal (SVG: 36 ticks and 8 coloured segments from the hash).
 - `web/src/ledger/sample.js`: the made-up application for the explorer.
 
 The hashing is real; the chain itself is **simulated in the browser** until the contracts

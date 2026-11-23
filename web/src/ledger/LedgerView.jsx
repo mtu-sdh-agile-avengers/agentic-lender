@@ -1,10 +1,14 @@
-// Blockchain ledger views (ALG4-108): a loan application as a chain of hash-linked blocks.
-// <LedgerView> sits in every Loan File; <BlockchainExplorer> is a page that walks a sample
-// application through its life, step by step, for demos.
+// Blockchain record of a loan application (ALG4-108).
+// <LedgerView> sits in every Loan File; <BlockchainExplorer> tells the story of a sample loan.
+//
+// Visual idea: like a land registry, every status change is sealed. Each block gets a seal
+// generated from its own SHA-256 hash, so a different hash is a visibly different seal. The
+// loan's token travels along the track of states; threads tie each seal to the one before it
+// and snap when someone rewrites history.
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
-  ArrowRight, Blocks, CircleCheckBig, CircleX, CornerDownRight, Database, Fingerprint, Link2, Pause, Play,
-  RotateCcw, ShieldCheck, SkipBack, SkipForward, Unlink,
+  Blocks, CircleCheckBig, CircleX, Database, Pause, Play, RotateCcw, ShieldCheck, SkipBack,
+  SkipForward,
 } from 'lucide-react';
 import {
   MAIN_PATH, TRANSITION_ACTORS, ZERO_HASH, buildLedger, documentOf, fingerprint, rewriteBlock,
@@ -13,206 +17,287 @@ import {
 import {SAMPLE_APPLICATION, SAMPLE_STEPS} from './sample.js';
 import './ledger.css';
 
-const STEP_MS = 700;
+const STEP_MS = 900;
+const HEX = '0123456789abcdef';
+const SEAL_COLORS = ['#1f6b45', '#2a9cb8', '#8cc265', '#c98a1b', '#173b2a'];
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const euro = (value) => new Intl.NumberFormat('en-IE', {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(value);
 const when = (iso) => new Date(iso).toLocaleString('en-IE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 
-/** Four coloured bars from the first bytes of a hash: two different hashes look different at a glance. */
-function HashSwatch({hash}) {
-  const hex = (hash || '').replace(/^0x/, '').padEnd(24, '0');
-  return <span className="lg-swatch" aria-hidden="true">
-    {[0, 6, 12, 18].map((i) => <i key={i} style={{background: `#${hex.slice(i, i + 6)}`}}/>)}
-  </span>;
+// ---------------------------------------------------------------------------
+// Seal: a circular mark drawn from a hash. Same hash, same seal; any change, a new seal.
+// ---------------------------------------------------------------------------
+function arc(r1, r2, a0, a1) {
+  const p = (r, a) => `${(r * Math.cos(a)).toFixed(2)} ${(r * Math.sin(a)).toFixed(2)}`;
+  return `M${p(r2, a0)} A${r2} ${r2} 0 0 1 ${p(r2, a1)} L${p(r1, a1)} A${r1} ${r1} 0 0 0 ${p(r1, a0)} Z`;
 }
 
-function Hash({label, value, tone}) {
-  return <div className={`lg-hash ${tone || ''}`}>
-    <span>{label}</span>
-    <code title={value}>{value === ZERO_HASH ? '0x0000…0000' : shortHash(value)}</code>
-  </div>;
+export function Seal({hash, size = 64, label, tone = 'ok', stamp = false, delay = 0}) {
+  const hex = (hash || '').replace(/^0x/, '').padEnd(64, '0');
+  const nib = (i) => parseInt(hex[i % 64], 16);
+  const ticks = Array.from({length: 36}, (_, i) => {
+    const a = (i / 36) * Math.PI * 2 - Math.PI / 2;
+    const len = 2.5 + (nib(i) % 4) * 1.6;
+    return <line key={i} x1={(30 - len) * Math.cos(a)} y1={(30 - len) * Math.sin(a)} x2={30 * Math.cos(a)} y2={30 * Math.sin(a)}/>;
+  });
+  const arcs = Array.from({length: 8}, (_, i) => {
+    const a0 = (i / 8) * Math.PI * 2 - Math.PI / 2 + 0.04;
+    const a1 = ((i + 1) / 8) * Math.PI * 2 - Math.PI / 2 - 0.04;
+    const color = SEAL_COLORS[(nib(36 + i * 2) * 16 + nib(37 + i * 2)) % SEAL_COLORS.length];
+    return <path key={i} d={arc(15.5, 21.5, a0, a1)} fill={color} opacity={0.55 + (nib(52 + i) % 4) * 0.15}/>;
+  });
+  return <svg className={`lg-seal ${tone} ${stamp ? 'stamp' : ''}`} style={{width: size, height: size, animationDelay: `${delay}ms`}}
+    viewBox="-32 -32 64 64" role="img" aria-label={`Seal of ${shortHash(hash)}`}>
+    <circle r="31" className="lg-seal-bg"/>
+    <g className="lg-seal-ticks">{ticks}</g>
+    <circle r="23.5" className="lg-seal-ring"/>
+    {arcs}
+    <circle r="13" className="lg-seal-core"/>
+    {label !== undefined && <text className="lg-seal-label" textAnchor="middle" dominantBaseline="central">{label}</text>}
+    {tone === 'bad' && <path className="lg-seal-crack" d="M-24 -10 L-6 -3 L-11 6 L8 2 L4 12 L25 18"/>}
+  </svg>;
 }
 
 // ---------------------------------------------------------------------------
-// State machine: the same transitions AL-Core enforces
+// Hash text that computes in front of you: random hex settling left to right
 // ---------------------------------------------------------------------------
-export function StateMachine({history}) {
+function useScramble(value, duration = 600) {
+  const [shown, setShown] = useState(value);
+  useEffect(() => {
+    if (!value || reducedMotion()) { setShown(value); return undefined; }
+    let frame;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const settled = Math.floor(progress * value.length);
+      setShown(value.split('').map((ch, i) => (i < settled || i < 2 || !HEX.includes(ch) ? ch : HEX[(Math.random() * 16) | 0])).join(''));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value, duration]);
+  return shown;
+}
+
+function HashText({value}) {
+  const shown = useScramble(value === ZERO_HASH ? '0x0000…0000' : shortHash(value));
+  return <code className="lg-hashtext" title={value}>{shown}</code>;
+}
+
+// ---------------------------------------------------------------------------
+// The track: the loan's token moving through the states AL-Core allows
+// ---------------------------------------------------------------------------
+export function TokenTrack({history, headHash}) {
   const {visited, current, next} = stateMap(history);
-  const closed = visited.includes('Closed');
-  const classFor = (state) => {
-    if (state === current) return 'current';
-    if (visited.includes(state)) return 'done';
-    if (next.includes(state)) return 'next';
-    return closed ? 'skipped' : 'todo';
-  };
-  return <div className="lg-machine" role="img" aria-label={`Application state: ${current || 'not submitted'}. Next possible: ${next.join(', ') || 'none'}.`}>
-    <ol className="lg-path">
-      {MAIN_PATH.map((state, index) => <React.Fragment key={state}>
-        {index > 0 && <li className={`lg-edge ${visited.includes(state) ? 'done' : ''}`} aria-hidden="true">
-          <span>{TRANSITION_ACTORS[`${MAIN_PATH[index - 1]}>${state}`]}</span><ArrowRight size={16}/>
-        </li>}
-        <li className={`lg-state ${classFor(state)}`}>
-          <i>{visited.includes(state) && state !== current ? <CircleCheckBig size={16}/> : index + 1}</i>
+  const closed = current === 'Closed';
+  const lastOnLine = [...visited].reverse().find((state) => MAIN_PATH.includes(state));
+  const position = lastOnLine ? MAIN_PATH.indexOf(lastOnLine) : -1;
+  const at = (i) => (i / (MAIN_PATH.length - 1)) * 100;
+
+  return <div className="lg-track" role="img"
+    aria-label={`The loan is ${current ? `at ${current}` : 'not submitted yet'}. It can move to: ${next.join(' or ') || 'nothing, it is closed'}.`}>
+    <div className="lg-rail" aria-hidden="true">
+      <div className="lg-rail-fill" style={{width: `${position < 0 ? 0 : at(position)}%`}}/>
+      {MAIN_PATH.slice(1).map((state, i) => <span key={state} className={`lg-rail-label ${visited.includes(state) ? 'done' : ''}`}
+        style={{left: `${(at(i) + at(i + 1)) / 2}%`}}>{TRANSITION_ACTORS[`${MAIN_PATH[i]}>${state}`]}</span>)}
+      {MAIN_PATH.map((state, i) => {
+        const status = state === current ? 'current' : visited.includes(state) ? 'done' : next.includes(state) ? 'next' : 'todo';
+        return <div key={state} className={`lg-station ${status} ${closed && !visited.includes(state) ? 'faded' : ''}`} style={{left: `${at(i)}%`}}>
+          <span className="lg-station-dot">{status === 'done' && <CircleCheckBig size={12}/>}</span>
           <strong>{state}</strong>
-          <small>{state === current ? 'now' : next.includes(state) ? 'can go next' : visited.includes(state) ? 'done' : ''}</small>
-        </li>
-      </React.Fragment>)}
-    </ol>
-    <div className={`lg-exit ${classFor('Closed')}`}>
-      <CornerDownRight className="lg-exit-arrow" size={22} aria-hidden="true"/>
-      <div className="lg-state-closed"><strong>Closed</strong><small>from any open state: withdrawn, declined or repaid</small></div>
+          {status === 'next' && <small>possible next</small>}
+        </div>;
+      })}
+      {position >= 0 && <div className={`lg-token ${closed ? 'closed' : ''}`} style={{left: `${at(position)}%`}}>
+        <Seal hash={headHash} size={34}/>
+      </div>}
+    </div>
+    <div className={`lg-exit ${closed ? 'current' : next.includes('Closed') ? 'next' : ''}`}>
+      <span className="lg-exit-line" aria-hidden="true"/>
+      <span className="lg-exit-station"><strong>Closed</strong>
+        <small>{closed ? 'the loan ended here' : 'withdrawn, declined or repaid, from any open state'}</small></span>
     </div>
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// The chain of blocks
+// Sealed blocks, tied together
 // ---------------------------------------------------------------------------
-function BlockCard({block, verdict, revealed, rewritten}) {
+function BlockCard({block, verdict, rewritten, stampDelay}) {
   const broken = verdict && !verdict.linkOk;
-  const invalid = verdict && !verdict.contentOk;
-  return <article className={`lg-block ${revealed ? 'in' : 'out'} ${rewritten ? 'rewritten' : ''} ${broken || invalid ? 'bad' : ''}`} aria-label={`Block ${block.index}: ${block.state}`}>
-    <header>
-      <span className="lg-index">#{block.index}</span>
-      <strong>{block.state}</strong>
-      <HashSwatch hash={block.hash}/>
-    </header>
-    <dl>
-      <div><dt>time</dt><dd>{when(block.timestamp)}</dd></div>
-      <div><dt>actor</dt><dd>{block.actor}</dd></div>
+  const tone = verdict && !verdict.contentOk ? 'bad' : rewritten ? 'warn' : broken ? 'bad' : 'ok';
+  return <article className={`lg-block ${tone}`} aria-label={`Block ${block.index + 1}: ${block.state}`}>
+    <Seal hash={block.hash} label={block.index + 1} tone={tone} stamp={stampDelay !== null || rewritten} delay={stampDelay || 0} key={block.hash}/>
+    <span className="lg-block-no">Block {block.index + 1}</span>
+    <h4>{block.state}</h4>
+    <p className="lg-block-meta">{when(block.timestamp)}, by {block.actor.toLowerCase() === 'system' ? 'the system' : `the ${block.actor.toLowerCase()}`}</p>
+    <dl className="lg-block-fields">
+      <div><dt>Record</dt><dd><HashText value={block.documentHash}/></dd></div>
+      {block.decisionHash && <div><dt>Decision</dt><dd><HashText value={block.decisionHash}/></dd></div>}
+      <div className={broken ? 'bad' : ''}><dt>Previous</dt><dd><HashText value={block.prevHash}/></dd></div>
+      <div className="own"><dt>This block</dt><dd><HashText value={block.hash}/></dd></div>
     </dl>
-    <Hash label="record" value={block.documentHash}/>
-    {block.decisionHash && <Hash label="decision" value={block.decisionHash}/>}
-    <Hash label="prev" value={block.prevHash} tone={broken ? 'bad' : ''}/>
-    <Hash label="hash" value={block.hash} tone={rewritten ? 'warn' : 'own'}/>
-    {rewritten && <p className="lg-note warn">Rewritten: content and hash changed</p>}
-    {broken && <p className="lg-note bad">prev no longer matches block #{block.index - 1}</p>}
-    {invalid && <p className="lg-note bad">hash does not match the content</p>}
+    {rewritten && <p className="lg-block-note warn">Rewritten and re-sealed</p>}
+    {broken && <p className="lg-block-note bad">Expects block {block.index}'s old seal</p>}
   </article>;
 }
 
-function Chain({blocks, verdicts, revealed, rewrittenIndex}) {
+function Chain({blocks, verdicts, revealed, rewrittenIndex, animateFrom}) {
   const scroller = useRef(null);
   useEffect(() => {
     const el = scroller.current;
     if (el && revealed > 0) el.scrollTo({left: el.scrollWidth, behavior: reducedMotion() ? 'auto' : 'smooth'});
   }, [revealed, blocks.length]);
-  if (!blocks.length) return <p className="lg-empty">No blocks yet: the first one is written when the application is submitted.</p>;
+
+  if (!blocks.length) return <p className="lg-empty">No blocks yet. The first one is sealed when the application is submitted.</p>;
   return <div className="lg-chain" ref={scroller} tabIndex={0} aria-label="Blocks, oldest first">
-    <div className="lg-genesis" aria-hidden="true"><span>0x0000…</span><small>start</small></div>
-    {blocks.map((block, index) => {
+    <div className="lg-genesis" aria-hidden="true">start<code>0x0000…</code></div>
+    {blocks.slice(0, revealed).map((block, index) => {
       const verdict = verdicts?.[index];
-      const linkBroken = verdict && !verdict.linkOk;
+      const animate = index >= animateFrom;
       return <React.Fragment key={block.index}>
-        <span className={`lg-link ${index < revealed ? 'in' : 'out'} ${linkBroken ? 'bad' : ''}`} aria-hidden="true">
-          {linkBroken ? <Unlink size={18}/> : <Link2 size={18}/>}
-        </span>
-        <BlockCard block={block} verdict={verdict} revealed={index < revealed} rewritten={index === rewrittenIndex}/>
+        <span className={`lg-thread ${verdict && !verdict.linkOk ? 'broken' : ''} ${animate ? 'draw' : ''}`}
+          style={{animationDelay: `${animate ? (index - animateFrom) * 140 : 0}ms`}} aria-hidden="true"/>
+        <BlockCard block={block} verdict={verdict} rewritten={index === rewrittenIndex}
+          stampDelay={animate ? (index - animateFrom) * 140 + 120 : null}/>
       </React.Fragment>;
     })}
+    {revealed < blocks.length && <div className="lg-next-block" aria-hidden="true">sealing…</div>}
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Off-chain vs on-chain
+// From record to seal: what the chain stores, and why an edit shows
 // ---------------------------------------------------------------------------
-function ChainSplit({application, documentHash, anchoredHash, edits}) {
+function HexDiff({value, reference}) {
+  const hex = value.replace(/^0x/, '');
+  const ref = reference.replace(/^0x/, '');
+  const changed = [...hex].filter((ch, i) => ch !== ref[i]).length;
+  return <div className="lg-hex">
+    <code aria-label={`SHA-256 ${value}`}>{[0, 16, 32, 48].map((start) => <span key={start}>
+      {[...hex.slice(start, start + 16)].map((ch, i) => <i key={i} className={ch !== ref[start + i] ? 'changed' : ''}>{ch}</i>)}
+    </span>)}</code>
+    {changed > 0 && <p><strong>{changed} of 64</strong> characters are different. A tiny edit changes the whole fingerprint.</p>}
+  </div>;
+}
+
+function RecordToSeal({application, edits, documentHash, anchoredHash}) {
   const p = application.propertySpec || {};
+  const value = (key) => edits?.[key] ?? application[key];
+  const changedKey = (key) => edits?.[key] !== undefined && edits[key] !== application[key];
   const rows = [
     ['Borrower', application.borrowerFullName || 'Borrower', true],
-    ['Annual income', euro(edits?.annualGrossIncome ?? application.annualGrossIncome), true],
-    ['Loan amount', euro(edits?.loanAmount ?? application.loanAmount), true],
+    ['Annual income', euro(value('annualGrossIncome')), true, 'annualGrossIncome'],
+    ['Loan amount', euro(value('loanAmount')), true, 'loanAmount'],
     ['Deposit', euro(application.deposit), true],
-    ['Property', [p.propertyType, p.county].filter(Boolean).join(', '), false],
-    ['Asking price', euro(p.askingPrice), false],
+    ['Property', [p.propertyType, p.county].filter(Boolean).join(', ')],
+    ['Asking price', euro(p.askingPrice)],
   ];
   const matches = documentHash === anchoredHash;
-  return <div className="lg-split">
-    <section className="lg-offchain">
-      <h3><Database size={17}/>Off-chain · Firestore</h3>
-      <p>The full record, readable only through AL-Core.</p>
-      <dl>{rows.map(([label, value, personal]) => <div key={label}><dt>{label}</dt><dd>{value}{personal && <span className="lg-tag">personal</span>}</dd></div>)}</dl>
+
+  return <div className="lg-bench">
+    <section className="lg-record">
+      <h3><Database size={16}/>The record, in Firestore</h3>
+      <p>Everything the decision was based on. It contains personal data, so it never goes on the chain.</p>
+      <dl>{rows.map(([label, shown, personal, key]) => <div key={label} className={key && changedKey(key) ? 'edited' : ''}>
+        <dt>{label}{personal && <span className="lg-personal">personal</span>}</dt><dd>{shown}</dd>
+      </div>)}</dl>
     </section>
-    <div className="lg-funnel" aria-hidden="true"><Fingerprint size={22}/><span>SHA-256</span><ArrowRight size={18}/></div>
-    <section className="lg-onchain">
-      <h3><Blocks size={17}/>On-chain · audit registry</h3>
-      <p>Only fingerprints: no names, no amounts, no user IDs.</p>
-      <pre>{`{
-  "applicationId": "${application.loanApplicationId}",
-  "documentHash": "${shortHash(anchoredHash)}",
-  "timestamp": "${application.createdAt?.slice(0, 19) || ''}Z"
-}`}</pre>
-      <div className={`lg-match ${matches ? 'ok' : 'bad'}`} role="status">
-        {matches ? <ShieldCheck size={18}/> : <CircleX size={18}/>}
-        <span>{matches
-          ? 'The Firestore record matches its on-chain fingerprint.'
-          : `The record was changed: its fingerprint is now ${shortHash(documentHash)}, the chain says ${shortHash(anchoredHash)}.`}</span>
+
+    <div className="lg-sha" aria-hidden="true"><span>SHA-256</span></div>
+
+    <section className="lg-seals">
+      <h3><Blocks size={16}/>What the chain keeps</h3>
+      <p>Only the record's fingerprint, sealed when the application was submitted.</p>
+      <div className="lg-seal-pair">
+        <figure>
+          <Seal hash={anchoredHash} size={96}/>
+          <figcaption>Sealed on the chain<code>{shortHash(anchoredHash)}</code></figcaption>
+        </figure>
+        <span className={`lg-equals ${matches ? 'ok' : 'bad'}`} aria-hidden="true">{matches ? '=' : '≠'}</span>
+        <figure>
+          <Seal hash={documentHash} size={96} tone={matches ? 'ok' : 'bad'} stamp key={documentHash}/>
+          <figcaption>The record right now<code>{shortHash(documentHash)}</code></figcaption>
+        </figure>
       </div>
+      <HexDiff value={documentHash} reference={anchoredHash}/>
     </section>
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// Tamper test
+// Try to change it
 // ---------------------------------------------------------------------------
-function TamperPanel({application, blocks, mode, setMode, edits, setEdits, rewrite, setRewrite, onReset}) {
+function TamperPanel({application, blocks, mode, setMode, edits, setEdits, rewrite, setRewrite, onReset, dirty}) {
+  const amount = edits.loanAmount ?? application.loanAmount;
   return <div className="lg-tamper">
-    <div className="lg-tabs" role="tablist" aria-label="Tamper test">
-      <button role="tab" aria-selected={mode === 'record'} onClick={() => setMode('record')}>Change the record</button>
-      <button role="tab" aria-selected={mode === 'history'} onClick={() => setMode('history')} disabled={blocks.length < 2}>Rewrite history</button>
-      <button className="lg-reset" onClick={onReset}><RotateCcw size={15}/>Reset</button>
+    <div className="lg-tamper-head">
+      <h3>Try to change it</h3>
+      <div className="lg-tabs" role="tablist" aria-label="What to change">
+        <button role="tab" aria-selected={mode === 'record'} onClick={() => setMode('record')}>Edit the record</button>
+        <button role="tab" aria-selected={mode === 'history'} onClick={() => setMode('history')} disabled={blocks.length < 2}>Rewrite a block</button>
+      </div>
+      <button className="lg-undo" onClick={onReset} disabled={!dirty}><RotateCcw size={15}/>Undo changes</button>
     </div>
     {mode === 'record' ? <div className="lg-tamper-body">
-      <p>Edit a copy of the Firestore record as if someone changed it in the database. Nothing is saved.</p>
-      <div className="lg-fields">
-        <label>Loan amount (€)<input type="number" step="1000" value={edits.loanAmount ?? application.loanAmount}
+      <p>Change a copy of the record, as if someone edited the database directly. Nothing is saved.</p>
+      <div className="lg-inputs">
+        <label>Loan amount (€)<input type="number" step="1000" value={amount}
           onChange={(e) => setEdits({...edits, loanAmount: Number(e.target.value)})}/></label>
         <label>Annual income (€)<input type="number" step="1000" value={edits.annualGrossIncome ?? application.annualGrossIncome}
           onChange={(e) => setEdits({...edits, annualGrossIncome: Number(e.target.value)})}/></label>
+        <button className="secondary" onClick={() => setEdits({...edits, loanAmount: amount + 1})}>Add €1 to the loan</button>
       </div>
     </div> : <div className="lg-tamper-body">
-      <p>Pick a block and change when it happened, then recompute its hash, like a forger would.</p>
-      <div className="lg-fields">
+      <p>Change when a step happened and re-seal that block, the way a forger would.</p>
+      <div className="lg-inputs">
         <label>Block<select value={rewrite.index} onChange={(e) => setRewrite({...rewrite, index: Number(e.target.value)})}>
-          {blocks.slice(0, -1).map((block) => <option key={block.index} value={block.index}>#{block.index} · {block.state}</option>)}
+          {blocks.slice(0, -1).map((block) => <option key={block.index} value={block.index}>Block {block.index + 1}: {block.state}</option>)}
         </select></label>
-        <label>New time<input type="datetime-local" value={rewrite.time} onChange={(e) => setRewrite({...rewrite, time: e.target.value})}/></label>
+        <label>New date and time<input type="datetime-local" value={rewrite.time} onChange={(e) => setRewrite({...rewrite, time: e.target.value})}/></label>
+        <button className="secondary" onClick={() => setRewrite({...rewrite, time: '2026-01-01T08:00'})}>Back-date it to 1 January</button>
       </div>
     </div>}
   </div>;
 }
 
 // ---------------------------------------------------------------------------
-// The ledger of one application
+// The record of one application
 // ---------------------------------------------------------------------------
-export function LedgerView({application, history: historyProp, title = 'Blockchain ledger', controls = true}) {
+export function LedgerView({application, history: historyProp, title = 'Blockchain record', controls = true}) {
   const history = historyProp ?? application.statusHistory ?? [];
   const [ledger, setLedger] = useState(null);
   const [error, setError] = useState('');
   const [revealed, setRevealed] = useState(history.length);
+  const [animateFrom, setAnimateFrom] = useState(0);
   const [mode, setMode] = useState('record');
   const [edits, setEdits] = useState({});
   const [rewrite, setRewrite] = useState({index: 0, time: ''});
   const [view, setView] = useState({blocks: [], verdicts: [], documentHash: ''});
+  const [replaying, setReplaying] = useState(false);
   const timer = useRef(null);
+  const previousLength = useRef(history.length);
   const historyKey = JSON.stringify(history);
 
-  // the chain as written: what every node of the network holds
   useEffect(() => {
     let cancelled = false;
     buildLedger(application, history)
       .then((built) => { if (!cancelled) { setLedger(built); setError(''); } })
-      .catch(() => { if (!cancelled) setError('Your browser cannot compute SHA-256 here (it needs HTTPS or localhost).'); });
+      .catch(() => { if (!cancelled) setError('This browser cannot compute SHA-256 here. Open the site over HTTPS or on localhost.'); });
     return () => { cancelled = true; };
   }, [application, historyKey]);
 
-  // grow with the history (explorer steps), without replaying everything
-  useEffect(() => { setRevealed(history.length); }, [history.length]);
+  // a new step (explorer) seals only the new block; the rest stay put
+  useEffect(() => {
+    if (history.length === previousLength.current) return;
+    setAnimateFrom(history.length > previousLength.current ? previousLength.current : history.length);
+    previousLength.current = history.length;
+    setRevealed(history.length);
+  }, [history.length]);
   useEffect(() => () => clearInterval(timer.current), []);
 
-  // what you see: the anchored chain, after the tamper test
   useEffect(() => {
-    if (!ledger) return;
+    if (!ledger) return undefined;
     let cancelled = false;
     (async () => {
       let blocks = ledger.blocks;
@@ -228,100 +313,110 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
 
   function replay() {
     clearInterval(timer.current);
+    setAnimateFrom(0);
     if (reducedMotion()) { setRevealed(history.length); return; }
     setRevealed(0);
+    setReplaying(true);
     let shown = 0;
     timer.current = setInterval(() => {
       shown += 1;
+      setAnimateFrom(shown - 1);
       setRevealed(shown);
-      if (shown >= history.length) clearInterval(timer.current);
+      if (shown >= history.length) { clearInterval(timer.current); setReplaying(false); }
     }, STEP_MS);
   }
   function reset() { setEdits({}); setRewrite({index: 0, time: ''}); }
 
   if (error) return <section className="card lg-card"><p className="lg-empty" role="alert">{error}</p></section>;
-  if (!ledger) return <section className="card lg-card"><p className="lg-empty" role="status">Hashing the application…</p></section>;
+  if (!ledger) return <section className="card lg-card"><p className="lg-empty" role="status">Sealing the record…</p></section>;
 
   const rewrittenIndex = mode === 'history' && rewrite.time ? rewrite.index : -1;
   const chainOk = view.verdicts.every((v) => v.contentOk && v.linkOk);
   const recordOk = view.documentHash === ledger.documentHash;
-  const head = view.blocks[view.blocks.length - 1];
-  const anchoredHead = ledger.blocks[ledger.blocks.length - 1];
-  const headMoved = head && anchoredHead && head.hash !== anchoredHead.hash;
-  const shownHistory = history.slice(0, revealed);
+  const allGood = chainOk && recordOk;
+  const shownBlocks = view.blocks.slice(0, revealed);
+  const head = shownBlocks[shownBlocks.length - 1];
+  const dirty = Object.keys(edits).length > 0 || Boolean(rewrite.time);
 
   return <section className="card lg-card">
     <header className="lg-head">
       <div>
-        <h2><span className="icon-chip"><Blocks size={18}/></span>{title}</h2>
-        <p className="lg-sub">Every status change becomes a block that carries the hash of the block before it.
-          <span className="lg-badge">Simulated in your browser · real SHA-256</span></p>
+        <h2>{title}</h2>
+        <p className="lg-sub">Every status change is sealed into a block that also carries the seal of the block before it, so nobody can quietly change the history.</p>
+        <p className="lg-honest">The chain is simulated in your browser until the bank's contracts are deployed; the SHA-256 hashes are real.</p>
       </div>
-      {controls && <button className="secondary" onClick={replay}><Play size={16}/>Replay</button>}
+      {controls && <button className="primary" onClick={replay} disabled={replaying}><Play size={16}/>{replaying ? 'Replaying…' : 'Replay history'}</button>}
     </header>
 
-    <StateMachine history={shownHistory}/>
-    <Chain blocks={view.blocks} verdicts={view.verdicts} revealed={revealed} rewrittenIndex={rewrittenIndex}/>
+    <TokenTrack history={history.slice(0, revealed)} headHash={head?.hash}/>
+    <Chain blocks={view.blocks} verdicts={view.verdicts} revealed={revealed} rewrittenIndex={rewrittenIndex} animateFrom={animateFrom}/>
 
-    <div className={`lg-verdict ${chainOk && recordOk && !headMoved ? 'ok' : 'bad'}`} role="status" aria-live="polite">
-      {chainOk && recordOk && !headMoved ? <ShieldCheck size={20}/> : <CircleX size={20}/>}
-      <div>
-        {chainOk && recordOk && !headMoved && <><strong>Chain intact.</strong> {view.blocks.length} block{view.blocks.length === 1 ? '' : 's'}, every link checks out, and the record matches its fingerprint.</>}
-        {!recordOk && <><strong>Record tampered.</strong> The Firestore data no longer produces the fingerprint stored on chain, so the change is detected.</>}
-        {!chainOk && <><strong>Chain broken.</strong> Block #{rewrittenIndex} was rewritten, so block #{rewrittenIndex + 1} points at a hash that no longer exists.</>}
-        {chainOk && headMoved && <><strong>History rewritten.</strong> The last block's hash differs from the copy everyone else holds.</>}
-      </div>
-    </div>
+    {replaying ? <div className="lg-verdict busy" role="status" aria-live="polite">
+      <Blocks size={20}/><p><strong>Sealing block {Math.min(revealed + 1, history.length)} of {history.length}…</strong></p>
+    </div> : <div className={`lg-verdict ${allGood ? 'ok' : 'bad'}`} role="status" aria-live="polite">
+      {allGood ? <ShieldCheck size={20}/> : <CircleX size={20}/>}
+      <p>
+        {allGood && <><strong>Intact.</strong> {shownBlocks.length} block{shownBlocks.length === 1 ? '' : 's'}, every link holds and the record matches its seal.</>}
+        {!recordOk && <><strong>The record was changed after it was sealed.</strong> Its fingerprint no longer matches the one on the chain.</>}
+        {!chainOk && <><strong>Block {rewrittenIndex + 1} was rewritten.</strong> Block {rewrittenIndex + 2} still carries its old seal, so the chain breaks there. Hiding that means re-sealing every later block on every copy of the chain.</>}
+      </p>
+    </div>}
 
-    <ChainSplit application={application} documentHash={view.documentHash} anchoredHash={ledger.documentHash} edits={mode === 'record' ? edits : null}/>
-    {controls && view.blocks.length > 0 && <TamperPanel application={application} blocks={ledger.blocks} mode={mode} setMode={(m) => { reset(); setMode(m); }}
-      edits={edits} setEdits={setEdits} rewrite={rewrite} setRewrite={setRewrite} onReset={reset}/>}
+    <RecordToSeal application={application} edits={mode === 'record' ? edits : null} documentHash={view.documentHash} anchoredHash={ledger.documentHash}/>
+    {controls && view.blocks.length > 0 && <TamperPanel application={application} blocks={ledger.blocks} mode={mode}
+      setMode={(m) => { reset(); setMode(m); }} edits={edits} setEdits={setEdits} rewrite={rewrite} setRewrite={setRewrite} onReset={reset} dirty={dirty}/>}
 
-    <p className="lg-foot">Contracts to come: loan token (ALG4-96) holds the state, audit registry (ALG4-97) holds the fingerprints. Until they are deployed, these blocks exist only in this page.</p>
+    <p className="lg-foot">Next: the loan token contract (ALG4-96) will hold the state, and the audit registry (ALG4-97) the fingerprints.</p>
   </section>;
 }
 
 // ---------------------------------------------------------------------------
-// Explorer page
+// Explorer: the story of one loan
 // ---------------------------------------------------------------------------
+const AUTOPLAY_MS = 3400;
+
 export function BlockchainExplorer({Hero}) {
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const last = SAMPLE_STEPS.length - 1;
   const history = useMemo(() => SAMPLE_APPLICATION.statusHistory.slice(0, step + 1), [step]);
-  const current = SAMPLE_STEPS[step];
 
   useEffect(() => {
     if (!playing) return undefined;
     if (step >= last) { setPlaying(false); return undefined; }
-    const id = setTimeout(() => setStep((s) => s + 1), reducedMotion() ? 600 : 2200);
+    const id = setTimeout(() => setStep((s) => s + 1), reducedMotion() ? 900 : AUTOPLAY_MS);
     return () => clearTimeout(id);
   }, [playing, step, last]);
 
-  function play() { if (step >= last) setStep(0); setPlaying(true); }
+  const go = (target) => { setPlaying(false); setStep(Math.max(0, Math.min(last, target))); };
 
   return <>
-    {Hero && <Hero eyebrow="Custom feature · blockchain" title="How a loan becomes a tamper-proof record" subtitle="Follow a sample application through its states and watch each one land on the chain." compact/>}
-    <section className="card lg-steps">
-      <div className="lg-step-controls">
-        <button className="secondary" onClick={() => { setPlaying(false); setStep((s) => Math.max(0, s - 1)); }} disabled={step === 0} aria-label="Previous step"><SkipBack size={16}/></button>
-        {playing
-          ? <button className="primary" onClick={() => setPlaying(false)}><Pause size={16}/>Pause</button>
-          : <button className="primary" onClick={play}><Play size={16}/>{step >= last ? 'Play again' : 'Play'}</button>}
-        <button className="secondary" onClick={() => { setPlaying(false); setStep((s) => Math.min(last, s + 1)); }} disabled={step === last} aria-label="Next step"><SkipForward size={16}/></button>
-        <ol className="lg-dots" aria-label="Steps">{SAMPLE_STEPS.map((s, i) => <li key={s.state}>
-          <button className={i === step ? 'active' : i < step ? 'done' : ''} onClick={() => { setPlaying(false); setStep(i); }} aria-label={`Step ${i + 1}: ${s.title}`} aria-current={i === step ? 'step' : undefined}/>
-        </li>)}</ol>
-      </div>
-      <div className="lg-story" aria-live="polite">
-        <span className="eyebrow">Step {step + 1} of {SAMPLE_STEPS.length} · {current.state}</span>
-        <h2>{current.title}</h2>
-        <div className="lg-story-cols">
-          <div><h3><Database size={16}/>In the app</h3><p>{current.app}</p></div>
-          <div><h3><Blocks size={16}/>On the chain</h3><p>{current.chain}</p></div>
+    {Hero && <Hero eyebrow="Blockchain" title="How a loan becomes a tamper-proof record" subtitle="Follow one application from the first click to the payout, and see what the chain keeps at every step." compact/>}
+    <div className="lg-explorer">
+      <aside className="card lg-story">
+        <div className="lg-story-controls">
+          <button className="secondary" onClick={() => go(step - 1)} disabled={step === 0} aria-label="Previous step"><SkipBack size={16}/></button>
+          {playing
+            ? <button className="primary" onClick={() => setPlaying(false)}><Pause size={16}/>Pause</button>
+            : <button className="primary" onClick={() => { if (step >= last) setStep(0); setPlaying(true); }}><Play size={16}/>{step >= last ? 'Play again' : 'Play the story'}</button>}
+          <button className="secondary" onClick={() => go(step + 1)} disabled={step === last} aria-label="Next step"><SkipForward size={16}/></button>
         </div>
-      </div>
-    </section>
-    <LedgerView application={SAMPLE_APPLICATION} history={history} title="Sample loan · demo data" controls={step === last && !playing}/>
+        <ol className="lg-steps">
+          {SAMPLE_STEPS.map((s, i) => <li key={s.state} className={i === step ? 'active' : i < step ? 'done' : ''}>
+            <button onClick={() => go(i)} aria-current={i === step ? 'step' : undefined}>
+              <span className="lg-step-no">{i < step ? <CircleCheckBig size={15}/> : i + 1}</span>
+              <span className="lg-step-title">{s.title}</span>
+            </button>
+            {i === step && <div className="lg-step-body">
+              {playing && <span key={step} className="lg-step-progress" style={{animationDuration: `${AUTOPLAY_MS}ms`}}/>}
+              <h3><Database size={15}/>In the app</h3><p>{s.app}</p>
+              <h3><Blocks size={15}/>On the chain</h3><p>{s.chain}</p>
+            </div>}
+          </li>)}
+        </ol>
+        <p className="lg-story-foot">{step === last ? 'Now try to change it: the controls are under the chain.' : 'A made-up application, for demonstration.'}</p>
+      </aside>
+      <LedgerView application={SAMPLE_APPLICATION} history={history} title="Sample loan" controls={step === last && !playing}/>
+    </div>
   </>;
 }
