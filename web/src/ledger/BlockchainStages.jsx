@@ -1,4 +1,4 @@
-// <BlockchainStages stages onStageClick onRetry height /> (ALG4-108)
+// <BlockchainStages stages onStageClick onRetry height theme /> (ALG4-108)
 // An interactive 3D chain of glass blocks, one per stage of a loan. The 3D scene (three.js,
 // react-three-fiber) is loaded only when this section is about to be seen; until then, and on
 // devices without WebGL, a 2D version in CSS shows the same stages, colours and statuses.
@@ -69,7 +69,9 @@ export function FlatStages({stages, vertical, selected, onSelect, onRetry}) {
   </ol>;
 }
 
-export function BlockchainStages({stages, onStageClick, onRetry, height = 440, label = 'Loan stages on the chain'}) {
+export const STAGE_THEMES = ['forest', 'mist'];
+
+export function BlockchainStages({stages, onStageClick, onRetry, height = 440, label = 'Loan stages on the chain', theme = 'forest', renderDetail}) {
   const wrapper = useRef(null);
   const {inView, seen} = useInView(wrapper);
   const reducedMotion = useMedia('(prefers-reduced-motion: reduce)');
@@ -93,7 +95,8 @@ export function BlockchainStages({stages, onStageClick, onRetry, height = 440, l
   const detail = selected !== null ? stages[selected] : null;
   const flat = useMemo(() => <FlatStages stages={stages} vertical={vertical} selected={selected} onSelect={select} onRetry={onRetry}/>, [stages, vertical, selected, select, onRetry]);
 
-  return <section className="bs-root" ref={wrapper} aria-label={label}>
+  const look = STAGE_THEMES.includes(theme) ? theme : 'forest';
+  return <section className={`bs-root theme-${look}`} ref={wrapper} aria-label={label}>
     {/* what a screen reader gets: the stages and their status, in order */}
     <ol className="bs-sr-only">
       {stages.map((stage, i) => <li key={stage.id}>Stage {i + 1} of {stages.length}, {stage.title}: {STATUS_LABELS[stage.status]}.{stage.reason ? ` ${stage.reason}` : ''}</li>)}
@@ -103,7 +106,7 @@ export function BlockchainStages({stages, onStageClick, onRetry, height = 440, l
       {webgl && seen
         ? <Suspense fallback={<div className="bs-loading">{flat}</div>}>
             <BlockchainScene stages={stages} active={inView} reducedMotion={reducedMotion} vertical={vertical}
-              selected={selected} onSelect={select} onRetry={onRetry}/>
+              selected={selected} onSelect={select} onRetry={onRetry} theme={look}/>
           </Suspense>
         : <div className="bs-loading">{flat}</div>}
 
@@ -114,6 +117,7 @@ export function BlockchainStages({stages, onStageClick, onRetry, height = 440, l
         <p>{detail.description}</p>
         {detail.reason && <p className="bs-detail-reason">{detail.reason}</p>}
         {detail.meta?.length > 0 && <dl>{detail.meta.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}
+        {renderDetail?.(detail, selected)}
         <small>Click the block again or press Esc to go back.</small>
       </aside>}
     </div>

@@ -42,7 +42,7 @@ export const STATUS_LABELS = {
  * @param {object} [args.application]  AL-Core application (decision, ids)
  * @param {{contentOk: boolean, linkOk: boolean}[]} [args.verdicts]  per-block verification
  * @param {{hash: string, actor: string, timestamp: string}[]} [args.blocks]  ledger blocks
- * @returns {{id, title, description, icon, status, reason?, meta: [string, string][]}[]}
+ * @returns {{id, title, description, icon, status, reason?, blockIndex: number|null, meta: [string, string][]}[]}
  */
 export function stagesFromLedger({history = [], application = {}, verdicts = [], blocks = []}) {
   const visited = history.map((change) => change.status);
@@ -67,18 +67,20 @@ export function stagesFromLedger({history = [], application = {}, verdicts = [],
 
   return STAGE_DEFS.map((stage, index) => {
     const at = visited.indexOf(stage.id);
-    const block = at >= 0 ? blocks[at] : null;
     let status = 'pending';
     if (failedAt >= 0 && index >= failedAt) status = index === failedAt ? 'failed' : 'pending';
     else if (at >= 0) status = 'success';
     else if (index === reached && !closed) status = 'processing';
+    // the stage a loan was closed at shows the block that closed it (the decline is sealed too)
+    const closedHere = status === 'failed' && brokenStage < 0 && closed && at < 0;
+    const blockIndex = at >= 0 ? at : closedHere ? visited.length - 1 : null;
+    const block = blockIndex !== null ? blocks[blockIndex] ?? null : null;
 
     const meta = [];
     if (block) {
       meta.push(['Sealed', new Date(block.timestamp).toLocaleString('en-IE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})]);
       meta.push(['By', block.actor]);
-      meta.push(['Block hash', `${block.hash.slice(0, 10)}…${block.hash.slice(-4)}`]);
     }
-    return {...stage, status, reason: status === 'failed' ? reason : undefined, meta};
+    return {...stage, status, reason: status === 'failed' ? reason : undefined, blockIndex: block ? blockIndex : null, meta};
   });
 }

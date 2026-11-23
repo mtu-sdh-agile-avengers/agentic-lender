@@ -1,6 +1,6 @@
 // The 3D scene of <BlockchainStages> (ALG4-108). Loaded on demand: three.js is big.
 //
-// Glass tiles stand in a diagonal row on a dark reflective floor; glowing beams with ring
+// Glass tiles stand in a diagonal row on a reflective floor (theme: forest or mist); glowing beams with ring
 // connectors tie them together and carry energy from one stage to the next. A failed stage
 // breaks the beam in front of it: it glitches, snaps in the middle with sparks, the block
 // shakes and cracks, and everything after it goes dark. When the stage recovers, it all
@@ -16,15 +16,38 @@ import {STATUS_LABELS} from './stages.js';
 // ---------------------------------------------------------------------------
 // Look
 // ---------------------------------------------------------------------------
-const BG = '#050d0a';
-const COLOR = {
-  success: new THREE.Color('#3cf2a0'),
-  processing: new THREE.Color('#3cc8f2'),
-  pending: new THREE.Color('#47665a'),
-  failed: new THREE.Color('#ff3d5f'),
-  dead: new THREE.Color('#26332d'),
-  spark: new THREE.Color('#ffb27a'),
+// Two looks: "forest" (deep brand green, glowing) and "mist" (the site's light green surfaces).
+const THEMES = {
+  // deep brand green (#234b35 family) instead of black, so the glow still reads
+  forest: {
+    bg: '#12301f', floor: '#143724', mirror: 0.5, mix: 10, metal: 0.45, ambient: 0.4, glass: '#e8fbf1',
+    glow: 1, bloom: 0.75, vignette: 0.45, key: '#3cc8f2', additive: true, tint: 1, attDist: 1.4, roughness: 0.12,
+    success: '#3cf2a0', processing: '#3cc8f2', pending: '#6f9a84', failed: '#ff4d6a', dead: '#2f4d3d', spark: '#ffb27a',
+  },
+  // the site's own light surfaces and colours (aero.css: --forest, --sage, --danger, --accent)
+  mist: {
+    bg: '#e6f3ec', floor: '#dcede3', mirror: 0, mix: 0, metal: 0.05, ambient: 1.15, glass: '#ffffff',
+    glow: 0.95, bloom: 0.25, vignette: 0.12, key: '#9fdcc8', additive: false, tint: 0.16, attDist: 6, roughness: 0.32,
+    success: '#258444', processing: '#239fc0', pending: '#93ad9f', failed: '#cc4962', dead: '#c3d3ca', spark: '#ed8750',
+  },
 };
+
+function makePalette(name) {
+  const theme = THEMES[name] ? name : 'forest';
+  const raw = THEMES[theme];
+  const color = (hex) => new THREE.Color(hex);
+  return {
+    ...raw, name: theme,
+    success: color(raw.success), processing: color(raw.processing), pending: color(raw.pending),
+    failed: color(raw.failed), dead: color(raw.dead), spark: color(raw.spark),
+  };
+}
+
+// Our own clock. react-three-fiber resets its clock to 0 whenever rendering pauses and resumes
+// (the scene pauses while it is off screen), which would put every stored time in the "future".
+const now = () => performance.now() / 1000;
+const MAX_DELTA = 0.05;
+const WHITE = new THREE.Color('#ffffff');
 const TILE = 1.5;
 const DEPTH = 0.34;
 const RADIUS = 0.16;
@@ -125,27 +148,26 @@ const rand = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return
 // Shared timeline: when each stage changed status, and what it was before
 // ---------------------------------------------------------------------------
 function useTimeline(stages, active) {
-  const {clock} = useThree();
   const tl = useRef(null);
   if (!tl.current || tl.current.items.length !== stages.length) {
     tl.current = {appearAt: null, items: stages.map((s) => ({status: s.status, prev: s.status, at: null}))};
   }
   useEffect(() => {
-    const now = clock.elapsedTime;
+    const t = now();
     stages.forEach((stage, i) => {
       const item = tl.current.items[i];
-      if (item.status !== stage.status) tl.current.items[i] = {status: stage.status, prev: item.status, at: now};
+      if (item.status !== stage.status) tl.current.items[i] = {status: stage.status, prev: item.status, at: t};
     });
-  }, [stages, clock]);
+  }, [stages]);
   useEffect(() => {
     if (active && tl.current.appearAt === null) {
-      const start = clock.elapsedTime + 0.1;
+      const start = now() + 0.1;
       tl.current.appearAt = start;
       // a stage that is already failed breaks during the intro, once the blocks are up
       const after = start + stages.length * APPEAR_STAGGER + APPEAR_TIME + 0.2;
       tl.current.items.forEach((item) => { if (item.at === null) item.at = item.status === 'failed' ? after : -100; });
     }
-  }, [active, clock, stages.length]);
+  }, [active, stages.length]);
   return tl;
 }
 
@@ -161,7 +183,7 @@ function GlowLine({points, lineRef, width = 1.5}) {
   return <Line ref={lineRef} points={points} lineWidth={width} transparent toneMapped={false} color="#ffffff"/>;
 }
 
-function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, hovered, selected, setHovered, onSelect, onRetry}) {
+function Block({i, n, stage, position, prevDir, nextDir, tl, pal, reduced, vertical, hovered, selected, setHovered, onSelect, onRetry}) {
   const group = useRef();
   const tilt = useRef();
   const glass = useRef();
@@ -183,11 +205,12 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
     quaternion: new THREE.Quaternion().setFromUnitVectors(Z, dir),
   })), [prevDir, nextDir]);
 
-  useFrame(({clock}, delta) => {
-    const t = clock.elapsedTime;
+  useFrame((_, rawDelta) => {
+    const t = now();
+    const delta = Math.min(rawDelta, MAX_DELTA);
     const state = tl.current;
     const item = state.items[i];
-    const since = item.at === null ? 0 : t - item.at;
+    const since = item.at === null ? 0 : Math.max(0, t - item.at);
     const fail = failure(state);
     const dead = fail.index >= 0 && i > fail.index;
     const deadT = dead ? (reduced ? 1 : clamp01((t - (fail.at + FLICKER + 0.5 + (i - fail.index) * 0.2)) / 0.5)) : 0;
@@ -197,23 +220,24 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
     const rise = reduced ? appearT : easeOutBack(appearT);
 
     // colour and glow by status
-    let intensity = 1.6;
+    let intensity = 1.6 * pal.glow;
     if (item.status === 'success') {
-      color.copy(COLOR.success);
-      if (item.prev !== 'success' && since < 0.7 && !reduced) intensity += 5 * (1 - since / 0.7); // flash
+      color.copy(pal.success);
+      if (item.prev !== 'success' && since < 0.9 && !reduced) intensity += 1.1 * (1 - since / 0.9); // short flash
     } else if (item.status === 'processing') {
-      color.copy(COLOR.processing);
-      intensity += reduced ? 0.3 : 0.9 * (0.5 + 0.5 * Math.sin(t * 3.2));
+      color.copy(pal.processing);
+      intensity += reduced ? 0.2 : 0.3 * (0.5 + 0.5 * Math.sin(t * 2));
     } else if (item.status === 'failed') {
-      color.copy(COLOR.failed);
-      intensity += reduced ? 0.6 : (since > FLICKER ? 1.2 * (0.5 + 0.5 * Math.sin(t * 9)) : 0);
+      color.copy(pal.failed);
+      intensity += reduced ? 0.4 : (since > FLICKER ? 0.45 * (0.5 + 0.5 * Math.sin(t * 3.5)) : 0);
     } else {
-      color.copy(COLOR.pending);
-      intensity = 0.9;
+      color.copy(pal.pending);
+      intensity = 0.9 * pal.glow;
     }
-    if (!reduced) intensity *= 0.9 + 0.1 * Math.sin(t * 1.6 + i); // breathing
-    if (deadT > 0) { color.lerp(COLOR.dead, deadT); intensity *= 1 - 0.75 * deadT; }
-    if (hovered) intensity *= 1.45;
+    if (!reduced) intensity *= 0.97 + 0.03 * Math.sin(t * 1.2 + i); // breathing, barely
+    if (deadT > 0) { color.lerp(pal.dead, deadT); intensity *= 1 - 0.75 * deadT; }
+    if (hovered) intensity *= 1.3;
+    if (!pal.additive) intensity = Math.max(intensity, 1); // on a light scene, dim means paler, not darker
 
     // position: levitate, hover lift, failure shake and settle, success bounce
     let y = (1 - rise) * -1.9;
@@ -235,7 +259,7 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
       rotZ = 0.1 * back;
     }
     if (item.status === 'success' && item.prev !== 'success' && since < 0.6 && !reduced) {
-      scale = 1 + 0.07 * Math.sin(Math.PI * (since / 0.6)) * (1 - since / 0.6);
+      scale = 1 + 0.025 * Math.sin(Math.PI * (since / 0.6));
     }
     group.current.position.set(position.x + x, position.y + y, position.z);
     group.current.scale.setScalar(scale);
@@ -249,9 +273,9 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
     const opacity = appearT;
     glow.copy(color).multiplyScalar(intensity);
     glass.current.opacity = 0.18 + 0.82 * opacity;
-    glass.current.attenuationColor.copy(color);
+    glass.current.attenuationColor.copy(color).lerp(WHITE, 1 - pal.tint);
     glass.current.emissive.copy(color);
-    glass.current.emissiveIntensity = item.status === 'pending' || deadT > 0.5 ? 0.02 : 0.08;
+    glass.current.emissiveIntensity = (item.status === 'pending' || deadT > 0.5 ? 0.02 : 0.08) * pal.tint;
     for (const ref of [outlineFront, outlineBack]) {
       const m = ref.current?.material;
       if (m) { m.color.copy(glow); m.opacity = opacity * (ref === outlineBack ? 0.5 : 1); }
@@ -267,7 +291,7 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
       else if (item.status === 'success') level = 0.85;
       else if (item.status === 'failed') level = reduced ? 0.5 : 0.25 + 0.6 * rand(Math.floor(t * 14) + k);
       else level = 0.12;
-      if (item.status === 'processing' && !reduced && since > 1.2) level = 0.55 + 0.45 * Math.sin(t * 3 - k * 0.5);
+      if (item.status === 'processing' && !reduced && since > 1.2) level = 0.65 + 0.2 * Math.sin(t * 1.8 - k * 0.5);
       line.material.color.copy(color).multiplyScalar(0.6 + intensity * 0.5 * level);
       line.material.opacity = opacity * level * (1 - deadT * 0.8);
     });
@@ -280,7 +304,7 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
       if (!line) return;
       const reach = clamp01(crack * 1.4 - k * 0.08);
       line.material.opacity = reach;
-      line.material.color.copy(COLOR.failed).multiplyScalar(2.2);
+      line.material.color.copy(pal.failed).multiplyScalar(2.2 * pal.glow);
     });
 
     // connectors spin while the stage is being worked on
@@ -304,9 +328,9 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
         onPointerOut={() => { setHovered(null); document.body.style.cursor = ''; }}
         onPointerMove={onMove}
         onClick={(e) => { e.stopPropagation(); onSelect(i); }}>
-        <meshPhysicalMaterial ref={glass} transparent transmission={1} thickness={0.9} roughness={0.12} ior={1.45}
-          iridescence={0.6} iridescenceIOR={1.25} clearcoat={1} clearcoatRoughness={0.1} color="#dffcf0"
-          attenuationDistance={1.4} envMapIntensity={1.2} emissiveIntensity={0.08}/>
+        <meshPhysicalMaterial ref={glass} transparent transmission={1} thickness={0.9} roughness={pal.roughness} ior={1.45}
+          iridescence={0.6} iridescenceIOR={1.25} clearcoat={1} clearcoatRoughness={0.1} color={pal.glass}
+          attenuationDistance={pal.attDist} envMapIntensity={1.2} emissiveIntensity={0.08}/>
       </RoundedBox>
       <group position={[0, 0, DEPTH / 2 + 0.004]}>
         <GlowLine points={frame} lineRef={outlineFront} width={1.8}/>
@@ -355,7 +379,7 @@ function Block({i, n, stage, position, prevDir, nextDir, tl, reduced, vertical, 
 // ---------------------------------------------------------------------------
 const SPARKS = 40;
 
-function Beam({k, from, to, tl, reduced}) {
+function Beam({k, from, to, tl, pal, reduced}) {
   const halves = [useRef(), useRef()];
   const cores = [useRef(), useRef()];
   const glows = [useRef(), useRef()];
@@ -379,8 +403,9 @@ function Beam({k, from, to, tl, reduced}) {
     return {dir, start, end, length, perp, quat, mid, velocities};
   }, [from, to, k]);
 
-  useFrame(({clock}, delta) => {
-    const t = clock.elapsedTime;
+  useFrame((_, rawDelta) => {
+    const t = now();
+    const delta = Math.min(rawDelta, MAX_DELTA);
     const state = tl.current;
     const a = state.items[k];
     const b = state.items[k + 1];
@@ -399,27 +424,28 @@ function Beam({k, from, to, tl, reduced}) {
     const live = a.status === 'success' && !breaking && !deadLink;
 
     // colour: carries the colour of the stage it leaves, red while breaking, dark when dead
-    col.copy(live ? (b.status === 'processing' ? COLOR.processing : COLOR.success) : COLOR.pending);
+    col.copy(live ? (b.status === 'processing' ? pal.processing : pal.success) : pal.pending);
     let opacity = live ? 1 : 0.35;
-    let intensity = live ? 2.4 : 0.9;
+    let intensity = (live ? 2.4 : 0.9) * pal.glow;
     let split = 0;
     if (breaking) {
       const flick = clamp01(sinceFail / FLICKER);
-      col.lerp(COLOR.failed, reduced ? 1 : flick);
-      intensity = 2.6;
+      col.lerp(pal.failed, reduced ? 1 : flick);
+      intensity = 2.6 * pal.glow;
       if (!reduced && sinceFail < FLICKER) opacity = 0.25 + 0.75 * rand(Math.floor(t * 40) + k); // glitch
       split = reduced ? 0.35 : easeOutCubic(clamp01((sinceFail - FLICKER) / SNAP_TIME));
       if (!reduced) opacity *= 1 - 0.75 * split;
       else opacity = 0.7;
     } else if (deadLink) {
       const fade = reduced ? 1 : clamp01((t - (fail.at + FLICKER + 0.5 + (k + 1 - fail.index) * 0.2)) / 0.4);
-      col.lerp(COLOR.dead, fade);
+      col.lerp(pal.dead, fade);
       opacity *= 1 - 0.85 * fade;
       intensity *= 1 - 0.7 * fade;
     } else if (healing) {
       split = 1 - easeOutCubic(clamp01((t - b.at) / HEAL_TIME));
     }
-    if (!reduced && live) intensity *= 0.85 + 0.15 * Math.sin(t * 2 + k);
+    if (!reduced && live) intensity *= 0.95 + 0.05 * Math.sin(t * 1.5 + k);
+    if (!pal.additive) intensity = Math.max(intensity, 1);
 
     // the two halves: meet in the middle, or fly apart around the break
     const half = geo.length / 2;
@@ -453,15 +479,15 @@ function Beam({k, from, to, tl, reduced}) {
       particles.current.setMatrixAt(p, dummy.matrix);
     }
     particles.current.instanceMatrix.needsUpdate = true;
-    particles.current.material.color.copy(col).multiplyScalar(3.2);
+    particles.current.material.color.copy(col).multiplyScalar(3.2 * pal.glow);
 
     // success: a bright impulse runs to the next block and wakes it up
     const pulseT = a.status === 'success' && a.prev !== 'success' && a.at !== null ? (t - a.at - 0.15) / 0.7 : -1;
     if (pulseT > 0 && pulseT < 1 && !reduced) {
       pulse.current.visible = true;
       pulse.current.position.copy(geo.start).addScaledVector(geo.dir, pulseT * geo.length);
-      pulse.current.scale.setScalar(1.4 + Math.sin(pulseT * Math.PI));
-      pulse.current.material.color.copy(COLOR.success).multiplyScalar(6);
+      pulse.current.scale.setScalar(1 + 0.6 * Math.sin(pulseT * Math.PI));
+      pulse.current.material.color.copy(pal.success).multiplyScalar(3 * pal.glow);
     } else pulse.current.visible = false;
 
     // sparks fly from the break
@@ -478,13 +504,13 @@ function Beam({k, from, to, tl, reduced}) {
       sparks.current.setMatrixAt(s, dummy.matrix);
     }
     sparks.current.instanceMatrix.needsUpdate = true;
-    sparks.current.material.color.copy(COLOR.spark).lerp(COLOR.failed, clamp01(sparkT)).multiplyScalar(5);
+    sparks.current.material.color.copy(pal.spark).lerp(pal.failed, clamp01(sparkT)).multiplyScalar(4 * pal.glow);
   });
 
   return <group>
     {[0, 1].map((h) => <group key={h} ref={halves[h]}>
       <mesh><cylinderGeometry args={[0.028, 0.028, 1, 10, 1, true]}/><meshBasicMaterial ref={cores[h]} transparent toneMapped={false}/></mesh>
-      <mesh><cylinderGeometry args={[0.085, 0.085, 1, 14, 1, true]}/><meshBasicMaterial ref={glows[h]} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}/></mesh>
+      <mesh><cylinderGeometry args={[0.085, 0.085, 1, 14, 1, true]}/><meshBasicMaterial ref={glows[h]} transparent depthWrite={false} blending={pal.additive ? THREE.AdditiveBlending : THREE.NormalBlending} toneMapped={false}/></mesh>
     </group>)}
     <instancedMesh ref={particles} args={[null, null, 5]}>
       <sphereGeometry args={[0.04, 10, 10]}/>
@@ -518,31 +544,33 @@ function usePoolTexture() {
   }, []);
 }
 
-function Floor({positions, tl, reduced}) {
+function Floor({positions, tl, pal, reduced}) {
   const texture = usePoolTexture();
   const pools = useRef([]);
-  useFrame(({clock}) => {
-    const t = clock.elapsedTime;
+  useFrame(() => {
+    const t = now();
     const fail = failure(tl.current);
     pools.current.forEach((pool, i) => {
       if (!pool) return;
       const item = tl.current.items[i];
       const dead = fail.index >= 0 && i > fail.index;
-      const c = dead ? COLOR.dead : COLOR[item.status] || COLOR.pending;
+      const c = dead ? pal.dead : pal[item.status] || pal.pending;
       pool.material.color.copy(c);
       const appear = tl.current.appearAt === null ? 0 : clamp01((t - tl.current.appearAt - i * APPEAR_STAGGER) / APPEAR_TIME);
-      pool.material.opacity = appear * (dead ? 0.15 : item.status === 'pending' ? 0.25 : 0.55) * (reduced ? 1 : 0.9 + 0.1 * Math.sin(t * 1.6 + i));
+      pool.material.opacity = appear * (dead ? 0.15 : item.status === 'pending' ? 0.25 : 0.55) * (reduced ? 1 : 0.96 + 0.04 * Math.sin(t * 1.2 + i));
     });
   });
   return <group>
     <mesh rotation-x={-Math.PI / 2} position={[0, FLOOR_Y, 0]}>
       <planeGeometry args={[60, 60]}/>
-      <MeshReflectorMaterial blur={[300, 80]} resolution={512} mixBlur={1} mixStrength={14} roughness={0.85}
-        depthScale={1.1} minDepthThreshold={0.4} maxDepthThreshold={1.4} color="#07120e" metalness={0.55} mirror={0.55}/>
+      {pal.mirror > 0
+        ? <MeshReflectorMaterial blur={[300, 80]} resolution={512} mixBlur={1} mixStrength={pal.mix} roughness={0.85}
+          depthScale={1.1} minDepthThreshold={0.4} maxDepthThreshold={1.4} color={pal.floor} metalness={pal.metal} mirror={pal.mirror}/>
+        : <meshStandardMaterial color={pal.floor} roughness={1} metalness={0}/>}
     </mesh>
     {positions.map((p, i) => <mesh key={i} ref={(el) => { pools.current[i] = el; }} rotation-x={-Math.PI / 2} position={[p.x, FLOOR_Y + 0.01, p.z]}>
       <planeGeometry args={[3.2, 3.2]}/>
-      <meshBasicMaterial map={texture} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}/>
+      <meshBasicMaterial map={texture} transparent depthWrite={false} blending={pal.additive ? THREE.AdditiveBlending : THREE.NormalBlending} toneMapped={false}/>
     </mesh>)}
   </group>;
 }
@@ -581,8 +609,9 @@ function CameraRig({positions, vertical, selected, tl, reduced, rowTurn}) {
     camera.lookAt(look);
   }, [base, camera, look, reduced]);
 
-  useFrame(({clock, pointer}, delta) => {
-    const t = clock.elapsedTime;
+  useFrame(({pointer}, rawDelta) => {
+    const t = now();
+    const delta = Math.min(rawDelta, MAX_DELTA);
     const appearAt = tl.current.appearAt;
     const dolly = appearAt === null || reduced ? 1 : easeOutCubic(clamp01((t - appearAt - 0.3) / 1.8));
     if (selected !== null && positions[selected]) {
@@ -611,42 +640,44 @@ function CameraRig({positions, vertical, selected, tl, reduced, rowTurn}) {
 // ---------------------------------------------------------------------------
 // Post: bloom on the glow, a vignette, and a short chromatic glitch when the chain breaks
 // ---------------------------------------------------------------------------
-function Effects({tl, reduced, multisampling}) {
+function Effects({tl, pal, reduced, multisampling}) {
   const aberration = useRef();
   const offset = useMemo(() => new THREE.Vector2(0, 0), []);
-  useFrame(({clock}) => {
+  useFrame(() => {
+    const t = now();
     const fail = failure(tl.current);
     let amount = 0;
     if (!reduced && fail.index >= 0) {
-      const s = clock.elapsedTime - fail.at - FLICKER;
-      if (s > -0.3 && s < 0.6) amount = 0.006 * (1 - Math.abs(s - 0.05) / 0.6) * (0.6 + 0.4 * rand(Math.floor(clock.elapsedTime * 30)));
+      const s = t - fail.at - FLICKER;
+      if (s > -0.3 && s < 0.6) amount = 0.004 * (1 - Math.abs(s - 0.05) / 0.6) * (0.6 + 0.4 * rand(Math.floor(t * 30)));
     }
     offset.set(Math.max(amount, 0), Math.max(amount, 0) * 0.6);
     if (aberration.current) aberration.current.offset = offset;
   });
   return <EffectComposer multisampling={multisampling} enableNormalPass={false}>
-    <Bloom mipmapBlur intensity={1.15} luminanceThreshold={0.85} luminanceSmoothing={0.2}/>
+    <Bloom mipmapBlur intensity={pal.bloom} luminanceThreshold={0.9} luminanceSmoothing={0.2}/>
     <ChromaticAberration ref={aberration} offset={offset} radialModulation={false} modulationOffset={0}/>
-    <Vignette offset={0.22} darkness={0.78}/>
+    <Vignette offset={0.25} darkness={pal.vignette}/>
   </EffectComposer>;
 }
 
 // ---------------------------------------------------------------------------
 // Scene
 // ---------------------------------------------------------------------------
-function Scene({stages, active, reducedMotion, vertical, selected, onSelect, onRetry}) {
+function Scene({stages, active, reducedMotion, vertical, selected, onSelect, onRetry, theme}) {
   const [hovered, setHovered] = useState(null);
+  const pal = useMemo(() => makePalette(theme), [theme]);
   const tl = useTimeline(stages, active);
   const positions = useMemo(() => layout(stages.length, vertical), [stages.length, vertical]);
   const rowTurn = vertical ? 0 : ROW_TURN;
   const dirs = useMemo(() => positions.map((p, i) => (i < positions.length - 1 ? positions[i + 1].clone().sub(p).normalize() : null)), [positions]);
 
   return <>
-    <color attach="background" args={[BG]}/>
-    <fog attach="fog" args={[BG, 9, 27]}/>
-    <ambientLight intensity={0.25}/>
+    <color attach="background" args={[pal.bg]}/>
+    <fog attach="fog" args={[pal.bg, 10, 30]}/>
+    <ambientLight intensity={pal.ambient}/>
     <directionalLight position={[-4, 6, 5]} intensity={0.6} color="#cfeee0"/>
-    <pointLight position={[0, 3, 4]} intensity={8} distance={14} color="#3cc8f2"/>
+    <pointLight position={[0, 3, 4]} intensity={8} distance={14} color={pal.key}/>
     <Environment resolution={256} frames={1}>
       <Lightformer form="rect" intensity={2.2} position={[0, 5, -8]} scale={[14, 3, 1]} color="#bfe9ff"/>
       <Lightformer form="rect" intensity={1.4} position={[-7, 2, 2]} rotation-y={Math.PI / 2} scale={[8, 2, 1]} color="#3cf2a0"/>
@@ -656,20 +687,20 @@ function Scene({stages, active, reducedMotion, vertical, selected, onSelect, onR
 
     <group rotation-y={rowTurn}>
       {stages.map((stage, i) => <Block key={stage.id} i={i} n={stages.length} stage={stage} position={positions[i]}
-        prevDir={i > 0 ? dirs[i - 1] : null} nextDir={dirs[i]} tl={tl} reduced={reducedMotion} vertical={vertical}
+        prevDir={i > 0 ? dirs[i - 1] : null} nextDir={dirs[i]} tl={tl} pal={pal} reduced={reducedMotion} vertical={vertical}
         hovered={hovered === i} selected={selected === i} setHovered={setHovered} onSelect={onSelect} onRetry={onRetry}/>)}
-      {positions.slice(0, -1).map((p, k) => <Beam key={`${k}-${positions.length}`} k={k} from={p} to={positions[k + 1]} tl={tl} reduced={reducedMotion}/>)}
-      {!vertical && <Floor positions={positions} tl={tl} reduced={reducedMotion}/>}
+      {positions.slice(0, -1).map((p, k) => <Beam key={`${k}-${positions.length}`} k={k} from={p} to={positions[k + 1]} tl={tl} pal={pal} reduced={reducedMotion}/>)}
+      {!vertical && <Floor positions={positions} tl={tl} pal={pal} reduced={reducedMotion}/>}
     </group>
 
     <CameraRig positions={positions} vertical={vertical} selected={selected} tl={tl} reduced={reducedMotion} rowTurn={rowTurn}/>
-    <Effects tl={tl} reduced={reducedMotion} multisampling={vertical ? 0 : 4}/>
+    <Effects tl={tl} pal={pal} reduced={reducedMotion} multisampling={vertical ? 0 : 4}/>
   </>;
 }
 
 export default function BlockchainScene(props) {
   const {active, onSelect, selected} = props;
-  return <div className="bs-canvas" aria-hidden="false">
+  return <div className="bs-canvas">
     <Canvas dpr={[1, 2]} frameloop={active ? 'always' : 'never'} camera={{fov: 35, position: [0, 3, 12], near: 0.1, far: 80}}
       gl={{antialias: false, powerPreference: 'high-performance'}}
       onPointerMissed={() => { if (selected !== null) onSelect(selected); }}>

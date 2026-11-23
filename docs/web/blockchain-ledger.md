@@ -25,19 +25,32 @@ beam. It is built with three.js through react-three-fiber.
 ![The 3D chain of a loan in progress](../imgs/blockchain-3d-chain.png)
 
 - **Appear:** blocks rise one after another, beams grow between them, the camera moves in.
-- **Idle:** blocks float slightly, edges breathe, energy particles run along live beams.
+- **Idle:** blocks float slightly and energy particles run along live beams.
 - **In progress:** the circuit lines inside the block light up from the centre and the
-  connector spins. **Done:** a flash, a small bounce, and an impulse runs to the next block.
+  connector spins. **Done:** a short glow and an impulse runs to the next block.
 - **Hover:** the block lifts and tilts towards the cursor and shows what the stage means.
-  **Click** (or Enter on its label): the camera focuses on it and a details panel opens;
-  click again or press Esc to go back.
+- **Click** (or Enter on its label): the camera focuses on the block and a details panel
+  opens with the block's **seal** and its hashes (see below). Click again or press Esc to go
+  back.
 - **Chain break:** when a stage fails (declined, withdrawn, or a block rewritten in the
   tamper test) the beam in front of it glitches and turns red, snaps in the middle with
   sparks, the block shakes, cracks and settles, and everything after it goes dark, all in
   under two seconds. A message with **Retry** appears above it; when the stage recovers the
   halves fly back together.
 
+![A block's details: its seal and the hashes that tie it to the block before](../imgs/blockchain-3d-detail.png)
+
 ![The chain breaks where the history was rewritten](../imgs/blockchain-3d-broken.png)
+
+Animations run on the page's own clock, so leaving the section and scrolling back does not
+replay them.
+
+**Look.** The scene has two themes, set with the `theme` prop of `LedgerView` /
+`BlockchainStages`: `forest` (default, deep brand green with glow) and `mist` (the site's
+light surfaces, frosted glass, no glow). The colours live in `THEMES` in
+`BlockchainScene.jsx` and in `.bs-root` / `.bs-root.theme-mist` in `stages.css`.
+
+![The mist theme](../imgs/blockchain-3d-mist.png)
 
 Performance and fallbacks: the 3D code (about 280 KB gzipped) is loaded only when the
 section is about to scroll into view, rendering pauses while it is off screen, and the pixel
@@ -49,27 +62,25 @@ them).
 
 ## What it shows
 
-1. **The 3D chain** above: one block per stage, as described in the section above.
-2. **Sealed blocks:** one block per status change. Each block gets a **seal drawn from its
-   own SHA-256 hash**: the same hash always gives the same seal, a different hash a visibly
-   different one. A block keeps the fingerprint of the record (and of the decision, in the
-   block that records it), the previous block's hash and its own. Threads tie each seal to
-   the one before it.
-3. **What the chain keeps:** the full record (names, income, amounts) stays in Firestore; the
+1. **The 3D chain** above: one block per stage. Each block has a **seal drawn from its own
+   SHA-256 hash**: the same hash always gives the same seal, a different hash a visibly
+   different one. The details panel shows the block's seal, the fingerprint of the record (and
+   of the decision, in the block that records it), the previous block's hash and its own.
+   A declined stage shows the block that closed the loan, so the decline is sealed too.
+2. **What the chain keeps:** the full record (names, income, amounts) stays in Firestore; the
    chain only keeps its fingerprint, shown as a seal next to the record's current seal.
-4. **Try to change it:**
+3. **Try to change it:**
    - *Edit the record* (or *Add €1 to the loan*): the record's seal changes completely and
      about 60 of the 64 hex characters differ, so the change is obvious.
    - *Rewrite a block* (or *Back-date it*): the forger re-seals that block, but the next block
-     still carries the old seal, so the thread snaps there.
+     still carries the old seal, so the chain snaps there. In that block's details the old
+     *Previous* hash is crossed out.
 
 ![The record's seal before and after adding €1](../imgs/blockchain-ledger-seals.png)
 
 ![A rewritten block breaks the chain](../imgs/blockchain-ledger-tamper.png)
 
-Motion is used where it explains something: seals stamp in when a block is written, threads
-draw, the token glides to the new state, hashes visibly compute when the data changes. With
-*reduce motion* turned on in the system settings everything appears in its final state.
+With *reduce motion* turned on in the system settings everything appears in its final state.
 
 ## How it works
 
@@ -78,7 +89,7 @@ draw, the token glides to the new state, hashes visibly compute when the data ch
   runner, also run in CI).
 - `web/src/ledger/BlockchainStages.jsx` (wrapper: lazy loading, fallback, accessibility,
   details panel), `BlockchainScene.jsx` (the 3D scene), `stages.js` (stage statuses from the
-  status history, the decision and the tamper test).
+  status history, the decision and the tamper test, and which block each stage shows).
 - `web/src/ledger/LedgerView.jsx`: `LedgerView` (Loan File), `BlockchainExplorer` (page) and
   `Seal`, the generative seal (SVG: 36 ticks and 8 coloured segments from the hash).
 - `web/src/ledger/sample.js`: the made-up application for the explorer.

@@ -39,3 +39,15 @@ test('a rewritten block fails the stage whose link broke', async () => {
   assert.deepEqual(statuses(stages), ['success', 'failed', 'pending', 'pending']);
   assert.match(stages[1].reason, /Chain broken/);
 });
+
+test('each stage points at its block; a declined stage shows the block that closed the loan', async () => {
+  const {blocks} = await buildLedger(SAMPLE_APPLICATION, H.slice(0, 2));
+  const open = stagesFromLedger({history: H.slice(0, 2), application: SAMPLE_APPLICATION, blocks});
+  assert.deepEqual(open.map((s) => s.blockIndex), [0, 1, null, null]);
+
+  const history = [...H.slice(0, 2), {status: 'Closed', changedById: SAMPLE_APPLICATION.bankOfficerId, changedAt: H[2].changedAt}];
+  const application = {...SAMPLE_APPLICATION, decision: {...SAMPLE_APPLICATION.decision, outcome: 'Declined'}};
+  const closed = await buildLedger(application, history);
+  const stages = stagesFromLedger({history, application, blocks: closed.blocks});
+  assert.deepEqual(stages.map((s) => s.blockIndex), [0, 1, 2, null]);
+});

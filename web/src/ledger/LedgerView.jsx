@@ -1,11 +1,11 @@
 // Blockchain record of a loan application (ALG4-108).
 // <LedgerView> sits in every Loan File; <BlockchainExplorer> tells the story of a sample loan.
 //
-// Visual idea: like a land registry, every status change is sealed. Each block gets a seal
-// generated from its own SHA-256 hash, so a different hash is a visibly different seal. The
-// loan's token travels along the track of states; threads tie each seal to the one before it
-// and snap when someone rewrites history.
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+// Visual idea: like a land registry, every status change is sealed. The 3D chain shows one
+// block per stage; clicking a block opens its seal (drawn from its own SHA-256 hash, so a
+// different hash is a visibly different seal) and the hashes that tie it to the block before.
+// Rewriting history snaps the chain where the old seal no longer matches.
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Blocks, CircleCheckBig, CircleX, Database, Pause, Play, RotateCcw, ShieldCheck, SkipBack,
   SkipForward,
@@ -24,7 +24,6 @@ const HEX = '0123456789abcdef';
 const SEAL_COLORS = ['#1f6b45', '#2a9cb8', '#8cc265', '#c98a1b', '#173b2a'];
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const euro = (value) => new Intl.NumberFormat('en-IE', {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(value);
-const when = (iso) => new Date(iso).toLocaleString('en-IE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 
 // ---------------------------------------------------------------------------
 // Seal: a circular mark drawn from a hash. Same hash, same seal; any change, a new seal.
@@ -87,48 +86,24 @@ function HashText({value}) {
 }
 
 // ---------------------------------------------------------------------------
-// Sealed blocks, tied together
+// A block's seal and hashes, shown in the 3D chain's details panel
 // ---------------------------------------------------------------------------
-function BlockCard({block, verdict, rewritten, stampDelay}) {
+function BlockSeal({block, total, verdict, rewritten}) {
   const broken = verdict && !verdict.linkOk;
   const tone = verdict && !verdict.contentOk ? 'bad' : rewritten ? 'warn' : broken ? 'bad' : 'ok';
-  return <article className={`lg-block ${tone}`} aria-label={`Block ${block.index + 1}: ${block.state}`}>
-    <Seal hash={block.hash} label={block.index + 1} tone={tone} stamp={stampDelay !== null || rewritten} delay={stampDelay || 0} key={block.hash}/>
-    <span className="lg-block-no">Block {block.index + 1}</span>
-    <h4>{block.state}</h4>
-    <p className="lg-block-meta">{when(block.timestamp)}, by {block.actor.toLowerCase() === 'system' ? 'the system' : `the ${block.actor.toLowerCase()}`}</p>
+  return <div className={`lg-detail-block ${tone}`}>
+    <div className="lg-detail-seal">
+      <Seal hash={block.hash} size={58} label={block.index + 1} tone={tone} stamp key={block.hash}/>
+      <p><strong>Block {block.index + 1} of {total}</strong>Its seal is drawn from its own hash.</p>
+    </div>
     <dl className="lg-block-fields">
       <div><dt>Record</dt><dd><HashText value={block.documentHash}/></dd></div>
       {block.decisionHash && <div><dt>Decision</dt><dd><HashText value={block.decisionHash}/></dd></div>}
       <div className={broken ? 'bad' : ''}><dt>Previous</dt><dd><HashText value={block.prevHash}/></dd></div>
       <div className="own"><dt>This block</dt><dd><HashText value={block.hash}/></dd></div>
     </dl>
-    {rewritten && <p className="lg-block-note warn">Rewritten and re-sealed</p>}
-    {broken && <p className="lg-block-note bad">Expects block {block.index}'s old seal</p>}
-  </article>;
-}
-
-function Chain({blocks, verdicts, revealed, rewrittenIndex, animateFrom}) {
-  const scroller = useRef(null);
-  useEffect(() => {
-    const el = scroller.current;
-    if (el && revealed > 0) el.scrollTo({left: el.scrollWidth, behavior: reducedMotion() ? 'auto' : 'smooth'});
-  }, [revealed, blocks.length]);
-
-  if (!blocks.length) return <p className="lg-empty">No blocks yet. The first one is sealed when the application is submitted.</p>;
-  return <div className="lg-chain" ref={scroller} tabIndex={0} aria-label="Blocks, oldest first">
-    <div className="lg-genesis" aria-hidden="true">start<code>0x0000…</code></div>
-    {blocks.slice(0, revealed).map((block, index) => {
-      const verdict = verdicts?.[index];
-      const animate = index >= animateFrom;
-      return <React.Fragment key={block.index}>
-        <span className={`lg-thread ${verdict && !verdict.linkOk ? 'broken' : ''} ${animate ? 'draw' : ''}`}
-          style={{animationDelay: `${animate ? (index - animateFrom) * 140 : 0}ms`}} aria-hidden="true"/>
-        <BlockCard block={block} verdict={verdict} rewritten={index === rewrittenIndex}
-          stampDelay={animate ? (index - animateFrom) * 140 + 120 : null}/>
-      </React.Fragment>;
-    })}
-    {revealed < blocks.length && <div className="lg-next-block" aria-hidden="true">sealing…</div>}
+    {rewritten && <p className="lg-block-note warn">Rewritten and re-sealed.</p>}
+    {broken && <p className="lg-block-note bad">Still expects block {block.index}'s old seal.</p>}
   </div>;
 }
 
@@ -230,12 +205,11 @@ function TamperPanel({application, blocks, mode, setMode, edits, setEdits, rewri
 // ---------------------------------------------------------------------------
 // The record of one application
 // ---------------------------------------------------------------------------
-export function LedgerView({application, history: historyProp, title = 'Blockchain record', controls = true, onRetry, sceneHeight = 440}) {
+export function LedgerView({application, history: historyProp, title = 'Blockchain record', controls = true, onRetry, sceneHeight = 440, theme = 'forest'}) {
   const history = historyProp ?? application.statusHistory ?? [];
   const [ledger, setLedger] = useState(null);
   const [error, setError] = useState('');
   const [revealed, setRevealed] = useState(history.length);
-  const [animateFrom, setAnimateFrom] = useState(0);
   const [mode, setMode] = useState('record');
   const [edits, setEdits] = useState({});
   const [rewrite, setRewrite] = useState({index: 0, time: ''});
@@ -253,10 +227,9 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
     return () => { cancelled = true; };
   }, [application, historyKey]);
 
-  // a new step (explorer) seals only the new block; the rest stay put
+  // a new step (explorer) adds only the new block; the rest stay put
   useEffect(() => {
     if (history.length === previousLength.current) return;
-    setAnimateFrom(history.length > previousLength.current ? previousLength.current : history.length);
     previousLength.current = history.length;
     setRevealed(history.length);
   }, [history.length]);
@@ -279,24 +252,27 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
 
   function replay() {
     clearInterval(timer.current);
-    setAnimateFrom(0);
     if (reducedMotion()) { setRevealed(history.length); return; }
     setRevealed(0);
     setReplaying(true);
     let shown = 0;
     timer.current = setInterval(() => {
       shown += 1;
-      setAnimateFrom(shown - 1);
       setRevealed(shown);
       if (shown >= history.length) { clearInterval(timer.current); setReplaying(false); }
     }, STEP_MS);
   }
   function reset() { setEdits({}); setRewrite({index: 0, time: ''}); }
+  const rewrittenIndex = mode === 'history' && rewrite.time ? rewrite.index : -1;
+  const renderDetail = useCallback((stage) => {
+    const block = stage.blockIndex !== null && stage.blockIndex !== undefined ? view.blocks[stage.blockIndex] : null;
+    if (!block) return <p className="lg-detail-none">No block yet. It is sealed when this step happens.</p>;
+    return <BlockSeal block={block} total={view.blocks.length} verdict={view.verdicts[stage.blockIndex]} rewritten={stage.blockIndex === rewrittenIndex}/>;
+  }, [view, rewrittenIndex]);
 
   if (error) return <section className="card lg-card"><p className="lg-empty" role="alert">{error}</p></section>;
   if (!ledger) return <section className="card lg-card"><p className="lg-empty" role="status">Sealing the record…</p></section>;
 
-  const rewrittenIndex = mode === 'history' && rewrite.time ? rewrite.index : -1;
   const chainOk = view.verdicts.every((v) => v.contentOk && v.linkOk);
   const recordOk = view.documentHash === ledger.documentHash;
   const allGood = chainOk && recordOk;
@@ -319,8 +295,9 @@ export function LedgerView({application, history: historyProp, title = 'Blockcha
       {controls && <button className="primary" onClick={replay} disabled={replaying}><Play size={16}/>{replaying ? 'Replaying…' : 'Replay history'}</button>}
     </header>
 
-    <BlockchainStages stages={stages} height={sceneHeight} onRetry={dirty ? reset : onRetry}/>
-    <Chain blocks={view.blocks} verdicts={view.verdicts} revealed={revealed} rewrittenIndex={rewrittenIndex} animateFrom={animateFrom}/>
+    {view.blocks.length === 0 && <p className="lg-empty">No blocks yet. The first one is sealed when the application is submitted.</p>}
+    <BlockchainStages stages={stages} height={sceneHeight} theme={theme} onRetry={dirty ? reset : onRetry} renderDetail={renderDetail}/>
+    <p className="lg-hint">Click a block to see its seal and the hashes that tie it to the one before.</p>
 
     {replaying ? <div className="lg-verdict busy" role="status" aria-live="polite">
       <Blocks size={20}/><p><strong>Sealing block {Math.min(revealed + 1, history.length)} of {history.length}…</strong></p>

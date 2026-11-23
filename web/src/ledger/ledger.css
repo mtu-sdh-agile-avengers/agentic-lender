@@ -19,7 +19,7 @@
   min-width: 0;
   color: var(--lg-ink);
 }
-.lg-card button:focus-visible, .lg-card input:focus-visible, .lg-card select:focus-visible, .lg-chain:focus-visible,
+.lg-card button:focus-visible, .lg-card input:focus-visible, .lg-card select:focus-visible,
 .lg-story button:focus-visible { outline: 2px solid var(--lg-teal); outline-offset: 2px; }
 .lg-empty { margin: 0; color: var(--lg-muted); }
 
@@ -30,35 +30,27 @@
 .lg-honest { margin: 6px 0 0; max-width: 70ch; font-size: 12.5px; color: var(--lg-muted); }
 .lg-head .primary { display: inline-flex; align-items: center; gap: 8px; }
 
-/* the chain */
-.lg-chain { display: flex; align-items: flex-start; overflow-x: auto; padding: 46px 6px 14px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; }
-.lg-genesis { flex: 0 0 auto; display: grid; justify-items: center; gap: 2px; margin-top: -9px; font-size: 11.5px; color: var(--lg-muted); }
-.lg-genesis code { font: 11px var(--lg-mono); }
-.lg-thread { position: relative; flex: 0 0 42px; height: 2px; background: var(--lg-forest); transform-origin: left center; }
-.lg-thread.draw { animation: lg-draw .45s ease-out both; }
-.lg-thread.broken { background: none; }
-.lg-thread.broken::before, .lg-thread.broken::after { content: ''; position: absolute; top: 0; width: 40%; height: 2px; background: var(--lg-red); animation: lg-snap .35s ease-out both; }
-.lg-thread.broken::before { left: 0; transform-origin: left; --lg-tilt: -14deg; }
-.lg-thread.broken::after { right: 0; transform-origin: right; --lg-tilt: 14deg; }
-.lg-block { position: relative; align-self: stretch; flex: 0 0 222px; scroll-snap-align: end; padding: 42px 16px 14px; border: 1px solid var(--lg-line); border-radius: 14px; background: var(--lg-paper); box-shadow: 0 14px 28px -20px rgba(23, 59, 42, .45); text-align: center; transition: border-color .3s; }
-.lg-block > .lg-seal { position: absolute; top: -32px; left: 50%; margin-left: -32px; }
-.lg-block-no { font-size: 12px; color: var(--lg-muted); }
-.lg-block h4 { margin: 2px 0 4px; font: 600 23px/1.1 var(--lg-serif); }
-.lg-block-meta { margin: 0 0 12px; font-size: 12.5px; color: var(--lg-muted); }
+/* a block's seal and hashes, inside the 3D chain's details panel (dark or light) */
+.lg-hint { margin: -12px 0 0; font-size: 12.5px; color: var(--lg-muted); }
+.lg-detail-block { margin: 12px 0 10px; padding-top: 12px; border-top: 1px solid var(--bs-border, var(--lg-line)); }
+.lg-detail-seal { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.lg-detail-seal .lg-seal { flex-shrink: 0; }
+.lg-detail-seal p { display: grid; gap: 2px; margin: 0 !important; font-size: 12.5px !important; color: var(--bs-muted, var(--lg-muted)) !important; }
+.lg-detail-seal strong { color: var(--bs-text, var(--lg-ink)); font-size: 14px; }
+.lg-detail-none { margin: 12px 0 10px !important; padding-top: 12px; border-top: 1px solid var(--bs-border, var(--lg-line)); font-size: 13px !important; color: var(--bs-muted, var(--lg-muted)) !important; }
 .lg-block-fields { margin: 0; display: grid; gap: 4px; text-align: left; }
-.lg-block-fields div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 4px 0; border-top: 1px dotted var(--lg-line); }
-.lg-block-fields dt { font-size: 12px; color: var(--lg-muted); }
+.lg-block-fields div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 4px 0; border-top: 1px dotted var(--bs-border, var(--lg-line)); }
+.lg-block-fields dt { font-size: 12px; color: var(--bs-muted, var(--lg-muted)); }
 .lg-block-fields dd { margin: 0; }
-.lg-hashtext { font: 12px var(--lg-mono); color: var(--lg-ink); }
-.lg-block-fields .own .lg-hashtext { color: var(--lg-forest); font-weight: 700; }
-.lg-block-fields .bad .lg-hashtext { color: var(--lg-red); text-decoration: line-through; }
-.lg-block.warn { border-color: var(--lg-amber); }
-.lg-block.warn .lg-block-fields .own .lg-hashtext { color: var(--lg-amber); }
-.lg-block.bad { border-color: var(--lg-red); }
-.lg-block-note { margin: 8px 0 0; font-size: 12px; font-weight: 600; }
-.lg-block-note.warn { color: var(--lg-amber); }
-.lg-block-note.bad { color: var(--lg-red); }
-.lg-next-block { flex: 0 0 160px; align-self: stretch; margin-left: 42px; display: grid; place-items: center; border: 1.5px dashed var(--lg-line); border-radius: 14px; color: var(--lg-muted); font-size: 13px; }
+.lg-hashtext { font: 12px var(--lg-mono); color: var(--bs-text, var(--lg-ink)); }
+.lg-block-fields .own .lg-hashtext { color: var(--bs-success, var(--lg-forest)); font-weight: 700; }
+.lg-block-fields .bad .lg-hashtext { color: var(--bs-failed, var(--lg-red)); text-decoration: line-through; }
+.lg-detail-block.warn .lg-block-fields .own .lg-hashtext { color: #e0a63a; }
+.theme-mist .lg-detail-block.warn .lg-block-fields .own .lg-hashtext { color: var(--lg-amber); }
+.lg-block-note { margin: 8px 0 0 !important; font-size: 12px !important; font-weight: 600; }
+.lg-block-note.warn { color: #e0a63a !important; }
+.theme-mist .lg-block-note.warn { color: var(--lg-amber) !important; }
+.lg-block-note.bad { color: var(--bs-reason, var(--lg-red)) !important; }
 
 /* seal */
 .lg-seal { display: block; overflow: visible; }
@@ -155,8 +147,6 @@
 .lg-story-foot { margin: 6px 0 0; font-size: 12.5px; color: #5d7568; }
 
 @keyframes lg-stamp { 0% { opacity: 0; transform: scale(1.7) rotate(-20deg); } 55% { opacity: 1; transform: scale(.92) rotate(3deg); } 100% { opacity: 1; transform: none; } }
-@keyframes lg-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes lg-snap { from { transform: rotate(0); } to { transform: rotate(var(--lg-tilt)); } }
 @keyframes lg-nudge { 0%, 100% { transform: none; } 30% { transform: translateX(-4px); } 60% { transform: translateX(3px); } }
 @keyframes lg-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
@@ -179,5 +169,5 @@
   .lg-inputs label { flex: 1 1 140px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lg-seal.stamp, .lg-thread.draw, .lg-verdict.bad, .lg-step-progress, .lg-thread.broken::before, .lg-thread.broken::after { animation-duration: 1ms; }
+  .lg-seal.stamp, .lg-verdict.bad, .lg-step-progress { animation-duration: 1ms; }
 }
