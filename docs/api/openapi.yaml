@@ -829,6 +829,166 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments:
+    post:
+      tags:
+      - payments
+      summary: Start Payment
+      description: Starts paying a fee of one of the borrower's loan applications (retail borrower). Returns the pending payment
+        and what Stripe's PaymentSheet needs. If this fee has an unpaid payment already, that payment is returned (200) instead
+        of a new one (201), so retrying never charges twice. The amount is set by AL-Core.
+      operationId: start_payment_api_v1_payments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentCheckoutResponse'
+        '200':
+          description: An unpaid payment of this fee was reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentCheckoutResponse'
+        '404':
+          description: Loan application not found among the borrower's
+        '409':
+          description: Fee already paid, or the application is closed
+        '502':
+          description: Stripe rejected the request
+        '503':
+          description: Payments are not configured (no Stripe keys)
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - payments
+      summary: Get Payment History
+      description: Returns the borrower's payment history, newest first; optionally of one loan application.
+      operationId: get_payment_history_api_v1_payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          description: page number (starting from 1)
+          default: 1
+          title: Page
+        description: page number (starting from 1)
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 15
+          title: Pagesize
+      - name: loanApplicationId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Loanapplicationid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_PaymentResponse_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/{payment_id}:
+    get:
+      tags:
+      - payments
+      summary: Get Payment
+      description: Returns one of the borrower's payments; the app polls it after Stripe's payment sheet closes.
+      operationId: get_payment_api_v1_payments__payment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Payment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Payment not found among the borrower's
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/webhooks/stripe:
+    post:
+      tags:
+      - payments
+      summary: Stripe Webhook
+      description: 'Stripe webhook (called by Stripe, not by clients). No bearer token: accepted only with a valid `Stripe-Signature`
+        header. Events about unknown payments are acknowledged and ignored.'
+      operationId: stripe_webhook_api_v1_payments_webhooks_stripe_post
+      parameters:
+      - name: stripe-signature
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stripe-Signature
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAckResponse'
+        '400':
+          description: Missing or invalid Stripe-Signature
+        '503':
+          description: STRIPE_WEBHOOK_SECRET is not set
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     AIDecision:
@@ -1637,6 +1797,155 @@ components:
       - hasNext
       - hasPrevious
       title: PaginatedResponse[LoanApplicationResponse]
+    PaginatedResponse_PaymentResponse_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PaymentResponse'
+          type: array
+          title: Items
+        page:
+          type: integer
+          title: Page
+        pageSize:
+          type: integer
+          title: Pagesize
+        total:
+          type: integer
+          title: Total
+        totalPages:
+          type: integer
+          title: Totalpages
+        hasNext:
+          type: boolean
+          title: Hasnext
+        hasPrevious:
+          type: boolean
+          title: Hasprevious
+      type: object
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      - totalPages
+      - hasNext
+      - hasPrevious
+      title: PaginatedResponse[PaymentResponse]
+    PaymentCheckoutResponse:
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentResponse'
+        stripe:
+          $ref: '#/components/schemas/StripePaymentSheetResponse'
+      type: object
+      required:
+      - payment
+      - stripe
+      title: PaymentCheckoutResponse
+      description: 'Response of `POST /api/v1/payments`: the (pending) payment and how to pay it.'
+    PaymentCreateBody:
+      properties:
+        loanApplicationId:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Loanapplicationid
+        feeType:
+          $ref: '#/components/schemas/PaymentFeeType'
+      type: object
+      required:
+      - loanApplicationId
+      - feeType
+      title: PaymentCreateBody
+      description: 'Body of `POST /api/v1/payments`. The amount is not sent: AL-Core sets it from the fee type.'
+    PaymentFeeType:
+      type: string
+      enum:
+      - application_verification
+      - appraisal_processing
+      title: PaymentFeeType
+      description: Fees a retail borrower can pay for a loan application (amounts in `payments.fees`).
+    PaymentProvider:
+      type: string
+      enum:
+      - stripe
+      title: PaymentProvider
+    PaymentResponse:
+      properties:
+        paymentId:
+          type: string
+          title: Paymentid
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        feeType:
+          $ref: '#/components/schemas/PaymentFeeType'
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        receiptUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Receipturl
+        failureReason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Failurereason
+        cardBrand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cardbrand
+        cardLast4:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cardlast4
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        paidAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paidat
+      type: object
+      required:
+      - paymentId
+      - loanApplicationId
+      - feeType
+      - amount
+      - currency
+      - provider
+      - status
+      - receiptUrl
+      - failureReason
+      - cardBrand
+      - cardLast4
+      - createdAt
+      - paidAt
+      title: PaymentResponse
+    PaymentStatus:
+      type: string
+      enum:
+      - pending
+      - succeeded
+      - failed
+      - refunded
+      title: PaymentStatus
+      description: Lifecycle of a payment; only the Stripe webhook moves it past `pending`.
     PropertySpecBody:
       properties:
         county:
@@ -2039,6 +2348,24 @@ components:
       - exposureAtRisk
       title: StressTestSummaryResponse
       description: Totals computed from `results` (not stored).
+    StripePaymentSheetResponse:
+      properties:
+        publishableKey:
+          type: string
+          title: Publishablekey
+        paymentIntentClientSecret:
+          type: string
+          title: Paymentintentclientsecret
+        merchantDisplayName:
+          type: string
+          title: Merchantdisplayname
+      type: object
+      required:
+      - publishableKey
+      - paymentIntentClientSecret
+      - merchantDisplayName
+      title: StripePaymentSheetResponse
+      description: What the Android app needs to open Stripe's PaymentSheet; never contains the secret key.
     SupportTicketCategory:
       type: string
       enum:
@@ -2297,6 +2624,14 @@ components:
       - decision
       - reason
       title: VoteResponse
+    WebhookAckResponse:
+      properties:
+        received:
+          type: boolean
+          title: Received
+          default: true
+      type: object
+      title: WebhookAckResponse
   securitySchemes:
     HTTPBearer:
       type: http

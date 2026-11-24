@@ -16,6 +16,7 @@ from src.config import get_config
 from src.conversations.v1.router import router as conversations_router
 from src.firebase.connection import init_firebase
 from src.loan_applications.v1.router import router as loan_applications_router
+from src.payments.v1.router import router as payments_router
 from src.rate_limiting import limiter
 from src.reviews.v1.router import router as reviews_router
 from src.stress_tests.v1.router import router as stress_tests_router
@@ -114,6 +115,7 @@ load_routers(
     support_tickets_router,
     reviews_router,
     audit_packs_router,
+    payments_router,
 )
 
 

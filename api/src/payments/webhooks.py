@@ -22,10 +22,15 @@ HANDLED_EVENTS = (
 
 @dataclass(frozen=True)
 class PaymentUpdate:
-    """Fields to set on the payment whose `payment_provider_id` is `payment_intent_id`."""
+    """Fields to set on the payment whose `payment_provider_id` is `payment_intent_id`.
+
+    `payment_id` comes from the PaymentIntent's metadata (PaymentIntent events only): a fallback match in case the
+    payment does not have its PaymentIntent ID stored yet.
+    """
 
     payment_intent_id: str
     fields: dict[str, Any] = field(default_factory=dict)
+    payment_id: str | None = None
 
 
 def _time(timestamp: int | None) -> datetime.datetime | None:
@@ -45,6 +50,7 @@ def to_update(event: dict[str, Any]) -> PaymentUpdate | None:
     """
     kind = event.get("type")
     obj: dict[str, Any] = (event.get("data") or {}).get("object") or {}
+    payment_id = (obj.get("metadata") or {}).get("payment_id")
 
     match kind:
         case "payment_intent.succeeded":
@@ -55,6 +61,7 @@ def to_update(event: dict[str, Any]) -> PaymentUpdate | None:
                     "failure_reason": None,
                     "paid_at": _time(event.get("created")),
                 },
+                payment_id,
             )
         case "payment_intent.payment_failed":
             error = obj.get("last_payment_error") or {}
@@ -64,6 +71,7 @@ def to_update(event: dict[str, Any]) -> PaymentUpdate | None:
                     "status": PaymentStatus.FAILED,
                     "failure_reason": error.get("message") or "The payment failed",
                 },
+                payment_id,
             )
         case "payment_intent.canceled":
             return PaymentUpdate(
@@ -72,6 +80,7 @@ def to_update(event: dict[str, Any]) -> PaymentUpdate | None:
                     "status": PaymentStatus.FAILED,
                     "failure_reason": obj.get("cancellation_reason") or "canceled",
                 },
+                payment_id,
             )
         case "charge.succeeded" if obj.get("payment_intent"):
             card = (obj.get("payment_method_details") or {}).get("card") or {}

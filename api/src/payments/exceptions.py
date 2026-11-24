@@ -40,3 +40,11 @@ class PaymentProviderError(PaymentError):
 class PaymentWebhookSignatureError(PaymentError):
     def __init__(self) -> None:
         super().__init__(status.HTTP_400_BAD_REQUEST, "Invalid Stripe-Signature")
+
+
+class PaymentApplicationClosedError(PaymentError):
+    def __init__(self, loan_application_id: str) -> None:
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            f"Loan application (id: {loan_application_id}) is closed; its fees can no longer be paid",
+        )

@@ -1,6 +1,6 @@
 # Payments (AL-Core + AL-Mobile, Stripe)
 
-**Jira:** ALG4-52 (epic), ALG4-150 (contract and mocks), ALG4-101 (sandbox) · **Author:** Pavlo · **Status:** contract and sandbox ready; endpoints in ALG4-227, ALG4-228, ALG4-232
+**Jira:** ALG4-52 (epic), ALG4-150 (contract and mocks), ALG4-101 (sandbox), ALG4-227 (start a payment), ALG4-228 (webhook), ALG4-232 (history) · **Author:** Pavlo · **Status:** implemented (AL-Core); mobile in ALG4-230/231
 
 A retail borrower pays a fee for their loan application from the mobile app: the **application verification fee**
 (€49) or the **fast-track appraisal** (€149, ALG4-103). Payments go through **Stripe** in **test mode** (a sandbox),
@@ -112,7 +112,9 @@ with `STRIPE_WEBHOOK_SECRET`, at most 5 minutes old), otherwise **400**. Events 
 | `charge.refunded` (in full)     | `status` = `refunded`                                      |
 
 Any other event, or an event for an unknown PaymentIntent, is acknowledged with 200 and ignored, so Stripe does not
-retry it.
+retry it. Repeated or late events cannot undo a result: a `payment_failed` that arrives after `succeeded` changes
+nothing, and a refunded payment stays refunded. If a payment has no PaymentIntent ID stored yet, it is matched by the
+`payment_id` in the intent's metadata.
 
 ## Set up the sandbox (ALG4-101)
 
@@ -192,6 +194,20 @@ expected changes, so the mocks cannot drift from the contract.
 
 ## Code
 
-`api/src/payments/`: `enums.py`, `fees.py`, `models.py`, `exceptions.py`, `gateway.py` (Stripe: PaymentIntents,
-webhook signature, live-key guard), `webhooks.py` (event to change), `dependencies.py` (`StripeGatewayDep`),
-`v1/schemas.py`. Script: `api/src/scripts/stripe_sandbox_check.py`. Tests: `api/tests/payments/`.
+`api/src/payments/`: `service.py` (start, reuse of unpaid payments, history, webhook), `repository.py` (Firestore;
+only single-field queries, so no composite index), `gateway.py` (Stripe: PaymentIntents, webhook signature, live-key
+guard), `webhooks.py` (event to change), `enums.py`, `fees.py`, `models.py`, `exceptions.py`, `dependencies.py`,
+`v1/router.py`, `v1/schemas.py`. Script: `api/src/scripts/stripe_sandbox_check.py`. Tests: `api/tests/payments/`.
+
+### Try the whole flow without the app
+
+With the stack running, your Stripe test keys in `.env` and `stripe listen` forwarding (see above), use the demo
+borrower `borrower@demo.agenticlender.ie` / `Password1` with an application (submit one from the mobile app first):
+
+1. `POST /api/v1/payments` with `{"loanApplicationId": "...", "feeType": "application_verification"}`, e.g. in Swagger
+   UI at `http://localhost:8000/docs` (*Authorize* with the borrower's ID token; how to get one: *Get an ID token* in
+   [run-guide.md](../run-guide.md)).
+2. Pay the PaymentIntent from the response in the Stripe Dashboard (*Payments*, open it, or
+   `stripe payment_intents confirm <pi_...> --payment-method pm_card_visa`).
+3. `stripe listen` shows `payment_intent.succeeded` and `charge.succeeded` answered with 200;
+   `GET /api/v1/payments/{paymentId}` now says `succeeded`, with the receipt link and `cardLast4` `4242`.

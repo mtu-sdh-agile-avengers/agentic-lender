@@ -1,6 +1,6 @@
 """Request and response bodies of the payments API (ALG4-150). Contract: docs/api/payments.md.
 
-Endpoints (implemented in ALG4-227, ALG4-228, ALG4-232):
+Endpoints (ALG4-227, ALG4-228, ALG4-232; `v1/router.py`):
     POST /api/v1/payments                   retail borrower starts paying a fee      -> PaymentCheckoutResponse
     GET  /api/v1/payments                   the borrower's payment history           -> PaginatedResponse[PaymentResponse]
     GET  /api/v1/payments/{payment_id}      one payment (the app polls it after paying) -> PaymentResponse
@@ -14,6 +14,7 @@ from pydantic import Field
 
 from src.payments.enums import PaymentFeeType, PaymentProvider, PaymentStatus
 from src.payments.models import PaymentModel
+from src.payments.service import PaymentCheckout
 from src.schemas import BaseSchema, PaginationQuery
 
 
@@ -67,6 +68,19 @@ class PaymentCheckoutResponse(BaseSchema):
 
     payment: PaymentResponse
     stripe: StripePaymentSheetResponse
+
+    @classmethod
+    def from_checkout(
+        cls, checkout: PaymentCheckout, merchant_display_name: str
+    ) -> Self:
+        return cls(
+            payment=PaymentResponse.from_model(checkout.payment),
+            stripe=StripePaymentSheetResponse(
+                publishable_key=checkout.publishable_key,
+                payment_intent_client_secret=checkout.intent.client_secret,
+                merchant_display_name=merchant_display_name,
+            ),
+        )
 
 
 class WebhookAckResponse(BaseSchema):
