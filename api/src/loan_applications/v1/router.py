@@ -17,6 +17,7 @@ from src.loan_applications.v1.schemas import (
     LoanApplicationCreateBody,
     LoanApplicationFilterQuery,
     LoanApplicationResponse,
+    LoanFileResponse,
     UnderwritingDecisionCreateBody,
 )
 from src.rate_limiting import limiter
@@ -81,8 +82,19 @@ async def get_loan_applications_list(
 # GET /api/v1/loan-applications/{loan_application_id}
 @router.get(
     "/{loan_application_id}",
-    response_model=LoanApplicationResponse,
-    description="Returns specific loan application.",
+    response_model=LoanFileResponse,
+    description=(
+        "Returns the loan file (dossier) of an application: financials, property, status history, the "
+        "borrower's contact details, attached documents and a summary of the latest AI committee run. "
+        "403 if the application is not one of the caller's (referred clients for a broker, portfolio for "
+        "a bank officer, own applications for a borrower); 404 if it does not exist."
+    ),
+    responses={
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Not one of the caller's applications"
+        },
+        status.HTTP_404_NOT_FOUND: {"description": "Loan application does not exist"},
+    },
 )
 @limiter.limit("60/minute")
 async def get_loan_application(
@@ -91,8 +103,8 @@ async def get_loan_application(
     current_user: AnyRoleDep,
     service: LoanApplicationServiceDep,
 ):
-    application = await service.get(current_user, loan_application_id)
-    return LoanApplicationResponse.from_model(application)
+    view = await service.get_file(current_user, loan_application_id)
+    return LoanFileResponse.from_view(view)
 
 
 # PUT /api/v1/loan-applications/{loan_application_id}/broker

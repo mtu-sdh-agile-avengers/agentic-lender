@@ -15,5 +15,9 @@ class UserInfoSearchGateway:
             return None
 
         return UserInfoModel(
-            uid=profile.uid, full_name=profile.full_name, role=profile.role
+            uid=profile.uid,
+            full_name=profile.full_name,
+            role=profile.role,
+            email=profile.email,
+            phone=profile.phone,
         )

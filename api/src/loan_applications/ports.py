@@ -3,8 +3,13 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+from src.assessments.models import AssessmentModel
 from src.loan_applications.enums import LoanApplicationStatus, LtvGroup, RiskTier
-from src.loan_applications.models import LoanApplicationModel, UserInfoModel
+from src.loan_applications.models import (
+    LoanApplicationModel,
+    LoanDocumentModel,
+    UserInfoModel,
+)
 from src.schemas import PaginatedResponse
 
 
@@ -40,6 +45,7 @@ class LoanApplicationRepositoryPort(Protocol):
     async def get_loan_applications_by_ids(
         self, application_ids: list[str]
     ) -> dict[str, LoanApplicationModel]: ...
+    async def get_documents(self, application_id: str) -> list[LoanDocumentModel]: ...
     async def get_portfolio(
         self,
         *,
@@ -52,4 +58,11 @@ class LoanApplicationRepositoryPort(Protocol):
 
 # required, so loan application service would not be able to add account or get excessive data
 class UserInfoSearchGatewayPort(Protocol):
-    async def find_user(self, uid: str) -> UserInfoModel: ...
+    async def find_user(self, uid: str) -> UserInfoModel | None: ...
+
+
+# the part of the assessments repository the loan file needs (the latest run only)
+class AssessmentReaderPort(Protocol):
+    async def get_assessment(
+        self, loan_application_id: str, assessment_id: str
+    ) -> AssessmentModel | None: ...

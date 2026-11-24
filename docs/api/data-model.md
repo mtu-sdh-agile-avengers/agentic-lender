@@ -387,7 +387,36 @@ classDiagram
 
 #### documents
 
-...
+Files attached to a loan application (payslips, bank statements, ID, property documents). Subcollection of the
+`loan_application`. The file itself is kept in Cloud Storage; Firestore keeps only its description. Read by
+`GET /api/v1/loan-applications/{id}` (loan file); every field except the ID is optional, so a document written by an
+older client still loads.
+
+```mermaid
+classDiagram
+  class documents {
+    <<subcollection>>
+    document_id: str
+    name: str
+    category: str | None
+    content_type: str | None
+    size_bytes: int | None
+    storage_path: str | None
+    uploaded_by_id: str | None
+    uploaded_at: datetime | None
+  }
+```
+
+| field          | type     | req | source | description                                                                   |
+|----------------|----------|-----|--------|-------------------------------------------------------------------------------|
+| document_id    | str      | x   | core   | Document uid; document name, not a field                                      |
+| name           | str      | x   | client | File name shown to the user; `Untitled document` if missing                   |
+| category       | str      | ?   | client | e.g. `payslip`, `bank_statement`, `id_document`, `property`                   |
+| content_type   | str      | ?   | client | MIME type, e.g. `application/pdf`                                             |
+| size_bytes     | int      | ?   | core   | File size; in bytes                                                           |
+| storage_path   | str      | ?   | core   | Object path in Cloud Storage; internal, never returned by the API             |
+| uploaded_by_id | str      | ?   | auth   | uid of the person who uploaded the file                                       |
+| uploaded_at    | datetime | ?   | core   | Upload time stamp; the loan file lists documents oldest first                 |
 
 #### assessments
 

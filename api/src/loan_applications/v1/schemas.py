@@ -3,6 +3,8 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
+from src.assessments.enums import AIDecision, AssessmentStatus
+from src.assessments.models import AssessmentModel
 from src.loan_applications.enums import (
     BerRating,
     County,
@@ -12,7 +14,13 @@ from src.loan_applications.enums import (
     RiskTier,
     UnderwritingOutcome,
 )
-from src.loan_applications.models import LoanApplicationModel, PropertySpecModel
+from src.loan_applications.models import (
+    LoanApplicationModel,
+    LoanDocumentModel,
+    PropertySpecModel,
+    UserInfoModel,
+)
+from src.loan_applications.service import LoanFileView
 from src.schemas import BaseSchema, PaginationQuery
 
 # Query + Body Models ---------------------------------------------------------------
@@ -145,3 +153,127 @@ class LoanApplicationResponse(BaseSchema):
     @classmethod
     def from_model(cls, model: LoanApplicationModel) -> Self:
         return cls.model_validate(model.model_dump())
+
+
+# Loan file (dossier) ---------------------------------------------------------
+
+
+class BorrowerInfoResponse(BaseSchema):
+    uid: str
+    full_name: str | None
+    email: str | None
+    phone: str | None
+
+    @classmethod
+    def from_view(
+        cls, application: LoanApplicationModel, borrower: UserInfoModel | None
+    ) -> Self:
+        if borrower is None:  # no profile: what the application itself knows
+            return cls(
+                uid=application.borrower_id,
+                full_name=application.borrower_full_name,
+                email=None,
+                phone=None,
+            )
+        return cls(
+            uid=borrower.uid,
+            full_name=borrower.full_name or application.borrower_full_name,
+            email=borrower.email,
+            phone=borrower.phone,
+        )
+
+
+class LoanDocumentResponse(BaseSchema):
+    document_id: str
+    name: str
+    category: str | None
+    content_type: str | None
+    size_bytes: int | None
+    uploaded_by_id: str | None
+    uploaded_at: datetime.datetime | None
+
+    @classmethod
+    def from_model(cls, model: LoanDocumentModel) -> Self:
+        return cls.model_validate(model.model_dump(exclude={"storage_path"}))
+
+
+def _number(source: dict | None, key: str) -> float | None:
+    value = (source or {}).get(key)
+    return (
+        value
+        if isinstance(value, int | float) and not isinstance(value, bool)
+        else None
+    )
+
+
+class AssessmentSummaryResponse(BaseSchema):
+    """Short summary of the latest AI committee run; the full reasoning is at `.../assessments/latest`."""
+
+    assessment_id: str
+    status: AssessmentStatus
+    decision: AIDecision | None
+    reason: str | None
+    automatic: bool
+    risk_tier: RiskTier | None
+    risk_score: float | None
+    approval_chance_percent: float | None
+    dti_percent: float | None
+    lti_multiple: float | None
+    ltv_percent: float | None
+    valuation_estimate: float | None
+    overvalued: bool | None
+    error: str | None
+    created_at: datetime.datetime
+    finished_at: datetime.datetime | None
+
+    @classmethod
+    def from_model(cls, model: AssessmentModel) -> Self:
+        risk = model.risk or {}
+        collateral = model.collateral or {}
+        tier = risk.get("tier")
+        overvalued = collateral.get("overvalued")
+        return cls(
+            assessment_id=model.assessment_id,
+            status=model.status,
+            decision=model.decision.decision if model.decision else None,
+            reason=model.decision.reason if model.decision else None,
+            automatic=model.decision.automatic if model.decision else False,
+            risk_tier=RiskTier(tier) if tier in RiskTier else None,
+            risk_score=_number(risk, "score"),
+            approval_chance_percent=_number(risk, "approval_chance_percent"),
+            dti_percent=_number(model.affordability, "dti_percent"),
+            lti_multiple=_number(model.affordability, "lti_multiple"),
+            ltv_percent=_number(collateral, "ltv_percent"),
+            valuation_estimate=_number(collateral, "estimate"),
+            overvalued=overvalued if isinstance(overvalued, bool) else None,
+            error=model.error,
+            created_at=model.created_at,
+            finished_at=model.finished_at,
+        )
+
+
+class LoanFileResponse(LoanApplicationResponse):
+    """Response of `GET /api/v1/loan-applications/{id}`: the application plus what the loan file page shows."""
+
+    borrower: BorrowerInfoResponse
+    documents: list[LoanDocumentResponse]
+    latest_assessment: AssessmentSummaryResponse | None
+
+    @classmethod
+    def from_view(cls, view: LoanFileView) -> Self:
+        return cls.model_validate(
+            {
+                **view.application.model_dump(),
+                "borrower": BorrowerInfoResponse.from_view(
+                    view.application, view.borrower
+                ),
+                "documents": [
+                    LoanDocumentResponse.from_model(d) for d in view.documents
+                ],
+                "latest_assessment": (
+                    AssessmentSummaryResponse.from_model(view.latest_assessment)
+                    if view.latest_assessment is not None
+                    else None
+                ),
+            }
+        )
