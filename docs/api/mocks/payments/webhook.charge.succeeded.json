@@ -1,0 +1,23 @@
+{
+  "id": "evt_3MockEventCharge0001",
+  "object": "event",
+  "type": "charge.succeeded",
+  "created": 1795514442,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "ch_3MockCharge0001",
+      "object": "charge",
+      "amount": 14900,
+      "currency": "eur",
+      "paid": true,
+      "refunded": false,
+      "payment_intent": "pi_3MockPaymentIntent0001",
+      "receipt_url": "https://pay.stripe.com/receipts/payment/mock-receipt-0001",
+      "payment_method_details": {
+        "type": "card",
+        "card": {"brand": "visa", "last4": "4242", "exp_month": 12, "exp_year": 2030}
+      }
+    }
+  }
+}

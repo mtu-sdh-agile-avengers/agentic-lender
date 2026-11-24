@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "paymentId": "demo-payment-0001",
+      "loanApplicationId": "demo-app-0001",
+      "feeType": "appraisal_processing",
+      "amount": 149.0,
+      "currency": "eur",
+      "provider": "stripe",
+      "status": "succeeded",
+      "receiptUrl": "https://pay.stripe.com/receipts/payment/mock-receipt-0001",
+      "failureReason": null,
+      "cardBrand": "visa",
+      "cardLast4": "4242",
+      "createdAt": "2026-11-24T10:00:00Z",
+      "paidAt": "2026-11-24T10:00:42Z"
+    },
+    {
+      "paymentId": "demo-payment-0002",
+      "loanApplicationId": "demo-app-0001",
+      "feeType": "application_verification",
+      "amount": 49.0,
+      "currency": "eur",
+      "provider": "stripe",
+      "status": "failed",
+      "receiptUrl": null,
+      "failureReason": "Your card was declined.",
+      "cardBrand": null,
+      "cardLast4": null,
+      "createdAt": "2026-11-24T09:30:00Z",
+      "paidAt": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 15,
+  "total": 2,
+  "totalPages": 1,
+  "hasNext": false,
+  "hasPrevious": false
+}

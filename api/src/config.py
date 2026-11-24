@@ -52,6 +52,16 @@ class Config(BaseSettings):
     ai_engine_url: str = "http://localhost:8001"
     internal_api_key: str = ""
 
+    # Stripe (payments, ALG4-101). Empty = payments are switched off (endpoints answer 503).
+    # Outside production only test-mode keys (sk_test_..., pk_test_...) are accepted, so no real money can move.
+    # ref: docs/api/payments.md
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = (
+        ""  # whsec_...; from `stripe listen` locally, from the Dashboard when deployed
+    )
+    payments_merchant_name: str = "Agentic Lender"  # shown in the mobile payment sheet
+
     # env_ignore_empty: `FIREBASE_MODE=` (empty) in .env means "not set", not an invalid value
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", env_ignore_empty=True
