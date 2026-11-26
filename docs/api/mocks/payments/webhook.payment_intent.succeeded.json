@@ -1,0 +1,23 @@
+{
+  "id": "evt_3MockEventSucceeded0001",
+  "object": "event",
+  "type": "payment_intent.succeeded",
+  "created": 1795514442,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "pi_3MockPaymentIntent0001",
+      "object": "payment_intent",
+      "amount": 14900,
+      "currency": "eur",
+      "status": "succeeded",
+      "latest_charge": "ch_3MockCharge0001",
+      "metadata": {
+        "payment_id": "demo-payment-0001",
+        "loan_application_id": "demo-app-0001",
+        "fee_type": "appraisal_processing",
+        "user_id": "demo-borrower"
+      }
+    }
+  }
+}

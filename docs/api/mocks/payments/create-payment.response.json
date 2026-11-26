@@ -1,0 +1,22 @@
+{
+  "payment": {
+    "paymentId": "demo-payment-0001",
+    "loanApplicationId": "demo-app-0001",
+    "feeType": "appraisal_processing",
+    "amount": 149.0,
+    "currency": "eur",
+    "provider": "stripe",
+    "status": "pending",
+    "receiptUrl": null,
+    "failureReason": null,
+    "cardBrand": null,
+    "cardLast4": null,
+    "createdAt": "2026-11-24T10:00:00Z",
+    "paidAt": null
+  },
+  "stripe": {
+    "publishableKey": "pk_test_51MockMockMockMockMockMockMockMockMockMockMockMockMock",
+    "paymentIntentClientSecret": "pi_3MockPaymentIntent0001_secret_MockClientSecret0001",
+    "merchantDisplayName": "Agentic Lender"
+  }
+}

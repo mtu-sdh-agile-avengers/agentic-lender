@@ -1,0 +1,15 @@
+{
+  "paymentId": "demo-payment-0002",
+  "loanApplicationId": "demo-app-0001",
+  "feeType": "application_verification",
+  "amount": 49.0,
+  "currency": "eur",
+  "provider": "stripe",
+  "status": "failed",
+  "receiptUrl": null,
+  "failureReason": "Your card was declined.",
+  "cardBrand": null,
+  "cardLast4": null,
+  "createdAt": "2026-11-24T09:30:00Z",
+  "paidAt": null
+}

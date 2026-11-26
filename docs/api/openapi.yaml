@@ -1,0 +1,2638 @@
+openapi: 3.1.0
+info:
+  title: AL-Core
+  description: REST API for Agentic Lender.
+  version: 0.3.0
+paths:
+  /:
+    get:
+      tags:
+      - root
+      summary: Root
+      description: Redirects to "/health".
+      operationId: root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /health:
+    get:
+      tags:
+      - health
+      summary: Health
+      description: Returns server status if it's available.
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /health/dependencies:
+    get:
+      tags:
+      - health
+      summary: Health Dependencies
+      description: 'Checks availability of required services. AI engine: reachable, X-Internal-Key accepted, model loaded.'
+      operationId: health_dependencies_health_dependencies_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/users/me:
+    get:
+      tags:
+      - users
+      summary: Get Me
+      description: Returns user profile record if it exists.
+      operationId: get_me_api_v1_users_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: Not Found
+          detail: User profile not found.
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - users
+      summary: Create Me
+      description: Creates user profile record in database.
+      operationId: create_me_api_v1_users_me_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/UserCreateBody'
+              - type: 'null'
+              title: Data
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '409':
+          description: Conflict
+          detail: User profile already exists
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/loan-applications:
+    post:
+      tags:
+      - loan-applications
+      summary: Submit Loan Application
+      description: Submits a new loan application (retail borrower).
+      operationId: submit_loan_application_api_v1_loan_applications_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanApplicationCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - loan-applications
+      summary: Get Loan Applications List
+      description: Returns loan applications of the caller, newest first.
+      operationId: get_loan_applications_list_api_v1_loan_applications_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          description: page number (starting from 1)
+          default: 1
+          title: Page
+        description: page number (starting from 1)
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 15
+          title: Pagesize
+      - name: unclaimedOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Unclaimedonly
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/LoanApplicationStatus'
+          - type: 'null'
+          title: Status
+      - name: ltvGroup
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/LtvGroup'
+          - type: 'null'
+          title: Ltvgroup
+      - name: riskTier
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/RiskTier'
+          - type: 'null'
+          title: Risktier
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_LoanApplicationResponse_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}:
+    get:
+      tags:
+      - loan-applications
+      summary: Get Loan Application
+      description: 'Returns the loan file (dossier) of an application: financials, property, status history, the borrower''s
+        contact details, attached documents and a summary of the latest AI committee run. 403 if the application is not one
+        of the caller''s (referred clients for a broker, portfolio for a bank officer, own applications for a borrower); 404
+        if it does not exist.'
+      operationId: get_loan_application_api_v1_loan_applications__loan_application_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanFileResponse'
+        '403':
+          description: Not one of the caller's applications
+        '404':
+          description: Loan application does not exist
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/broker:
+    put:
+      tags:
+      - loan-applications
+      summary: Claim Loan Application
+      description: Allows mortgage brokers to assign themselves to an unclaimed loan application.
+      operationId: claim_loan_application_api_v1_loan_applications__loan_application_id__broker_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - loan-applications
+      summary: Release Broker
+      description: Allows assigned mortgage brokers return claimed loan application.
+      operationId: release_broker_api_v1_loan_applications__loan_application_id__broker_delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/bank-officer:
+    put:
+      tags:
+      - loan-applications
+      summary: Assign Bank Officer
+      description: Allows bank officer to be assigned by broker to an unclaimed (by bank officer) loan application.
+      operationId: assign_bank_officer_api_v1_loan_applications__loan_application_id__bank_officer_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankOfficerAssignBody'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - loan-applications
+      summary: Release Bank Officer
+      description: Allows bank officer to return loan application.
+      operationId: release_bank_officer_api_v1_loan_applications__loan_application_id__bank_officer_delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/decision:
+    post:
+      tags:
+      - loan-applications
+      summary: Make Decision
+      description: Allows assigned bank officer to make final lending decision (approve or decline) for loan application.
+      operationId: make_decision_api_v1_loan_applications__loan_application_id__decision_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnderwritingDecisionCreateBody'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/withdrawal:
+    post:
+      tags:
+      - loan-applications
+      summary: Withdraw Loan Application
+      description: Allows borrower to withdraw (i.e., cancel) loan application if it's still open, before landing decision.
+      operationId: withdraw_loan_application_api_v1_loan_applications__loan_application_id__withdrawal_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanApplicationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/conversations:
+    post:
+      tags:
+      - conversations
+      summary: Open Conversation
+      description: 'Opens the borrower''s conversation about one of their applications with the broker or assigned bank officer).
+        Idempotent: an existing conversation is returned.'
+      operationId: open_conversation_api_v1_conversations_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '404':
+          detail: Loan application not found
+          description: Not Found
+        '409':
+          detail: No broker or officer assigned
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - conversations
+      summary: List Conversations
+      description: 'Inbox of the current user: conversations they take part in, most recent activity first.'
+      operationId: list_conversations_api_v1_conversations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConversationResponse'
+                title: Response List Conversations Api V1 Conversations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/conversations/{conversation_id}/messages:
+    post:
+      tags:
+      - conversations
+      summary: Send Message
+      description: 'Sends a message (reply) to the conversation. Any participant: borrower, broker or officer.'
+      operationId: send_message_api_v1_conversations__conversation_id__messages_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          detail: Conversation not found
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - conversations
+      summary: List Messages
+      description: Returns messages of a conversation, oldest first. Without `before` returns the latest page and marks the
+        conversation as read; pass the `created_at` of the oldest message as `before` to load older ones.
+      operationId: list_messages_api_v1_conversations__conversation_id__messages_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: before
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Before
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageResponse'
+                title: Response List Messages Api V1 Conversations  Conversation Id  Messages Get
+        '404':
+          detail: Conversation not found
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/assessments:
+    post:
+      tags:
+      - assessments
+      summary: Request Assessment
+      description: Starts an AI committee run (assigned broker or bank officer). Returns at once with status `queued`;poll
+        `GET .../assessments/latest`. If a run is already in progress, that run is returned.
+      operationId: request_assessment_api_v1_loan_applications__loan_application_id__assessments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/loan-applications/{loan_application_id}/assessments/latest:
+    get:
+      tags:
+      - assessments
+      summary: Get Latest Assessment
+      description: 'Get latest AI committee run: decision, each model''s vote and reason, the agents'' reasoning steps in
+        order, and the verified figures (affordability, collateral, risk).'
+      operationId: get_latest_assessment_api_v1_loan_applications__loan_application_id__assessments_latest_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/stress-tests:
+    post:
+      tags:
+      - stress-tests
+      summary: Run Stress Test
+      description: 'Runs a scenario over the caller''s portfolio: central bank rate shock (`rateShockBps`) and/or property
+        market downturn (`priceChangePercent`). Shows which borrowers could no longer afford repayments or would be in negative
+        equity. The run is saved.'
+      operationId: run_stress_test_api_v1_stress_tests_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StressTestCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StressTestResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - stress-tests
+      summary: Get Stress Tests
+      description: Returns the caller's previous stress tests, newest first (without per-borrower results).
+      operationId: get_stress_tests_api_v1_stress_tests_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StressTestListItemResponse'
+                title: Response Get Stress Tests Api V1 Stress Tests Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/stress-tests/{stress_test_id}:
+    get:
+      tags:
+      - stress-tests
+      summary: Get Stress Test
+      description: Return one of the caller's stress tests with per-borrower results.
+      operationId: get_stress_test_api_v1_stress_tests__stress_test_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: stress_test_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Stress Test Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StressTestResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/support-tickets:
+    post:
+      tags:
+      - support-tickets
+      summary: Submit Support Ticket
+      description: Submits a support request (retail borrower). `loanApplicationId` is required for the `loan_application`
+        category and must be one of the borrower's own applications.
+      operationId: submit_support_ticket_api_v1_support_tickets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportTicketCreateBody'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportTicketResponse'
+        '404':
+          description: Loan application not found among the borrower's
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/reviews:
+    post:
+      tags:
+      - reviews
+      summary: Submit Review
+      description: Rates the service from 1 (worst) to 5 (best), with an optional comment (retail borrower).
+      operationId: submit_review_api_v1_reviews_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreateBody'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/loan-applications/{loan_application_id}/audit-pack:
+    get:
+      tags:
+      - audit-packs
+      summary: Download Audit Pack
+      description: 'Downloads the audit pack of a decided loan application (assigned bank officer): the application, borrower,
+        status history, lending decision, the AI committee''s decision, votes, verified figures and reasoning steps, and a
+        SHA-256 fingerprint of the record (also in the `X-Audit-Pack-SHA256` header). `format=pdf` (default) or `format=csv`.'
+      operationId: download_audit_pack_api_v1_loan_applications__loan_application_id__audit_pack_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: loan_application_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Loan Application Id
+      - name: format
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/AuditPackFormat'
+          default: pdf
+      responses:
+        '200':
+          description: The audit pack as a file attachment
+          content:
+            application/pdf: {}
+            text/csv: {}
+        '403':
+          description: The bank officer is not assigned to the application
+        '404':
+          description: Loan application does not exist
+        '409':
+          description: No lending decision has been made yet
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments:
+    post:
+      tags:
+      - payments
+      summary: Start Payment
+      description: Starts paying a fee of one of the borrower's loan applications (retail borrower). Returns the pending payment
+        and what Stripe's PaymentSheet needs. If this fee has an unpaid payment already, that payment is returned (200) instead
+        of a new one (201), so retrying never charges twice. The amount is set by AL-Core.
+      operationId: start_payment_api_v1_payments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreateBody'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentCheckoutResponse'
+        '200':
+          description: An unpaid payment of this fee was reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentCheckoutResponse'
+        '404':
+          description: Loan application not found among the borrower's
+        '409':
+          description: Fee already paid, or the application is closed
+        '502':
+          description: Stripe rejected the request
+        '503':
+          description: Payments are not configured (no Stripe keys)
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - payments
+      summary: Get Payment History
+      description: Returns the borrower's payment history, newest first; optionally of one loan application.
+      operationId: get_payment_history_api_v1_payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 1000
+          minimum: 1
+          description: page number (starting from 1)
+          default: 1
+          title: Page
+        description: page number (starting from 1)
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 15
+          title: Pagesize
+      - name: loanApplicationId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Loanapplicationid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse_PaymentResponse_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/{payment_id}:
+    get:
+      tags:
+      - payments
+      summary: Get Payment
+      description: Returns one of the borrower's payments; the app polls it after Stripe's payment sheet closes.
+      operationId: get_payment_api_v1_payments__payment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Payment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          description: Payment not found among the borrower's
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/payments/webhooks/stripe:
+    post:
+      tags:
+      - payments
+      summary: Stripe Webhook
+      description: 'Stripe webhook (called by Stripe, not by clients). No bearer token: accepted only with a valid `Stripe-Signature`
+        header. Events about unknown payments are acknowledged and ignored.'
+      operationId: stripe_webhook_api_v1_payments_webhooks_stripe_post
+      parameters:
+      - name: stripe-signature
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stripe-Signature
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAckResponse'
+        '400':
+          description: Missing or invalid Stripe-Signature
+        '503':
+          description: STRIPE_WEBHOOK_SECRET is not set
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AIDecision:
+      type: string
+      enum:
+      - Approve
+      - Conditionally Approve
+      - Decline
+      - Unavailable
+      - Error
+      title: AIDecision
+    AgentStepResponse:
+      properties:
+        stepNumber:
+          type: integer
+          title: Stepnumber
+        agent:
+          type: string
+          title: Agent
+        summary:
+          type: string
+          title: Summary
+      type: object
+      required:
+      - stepNumber
+      - agent
+      - summary
+      title: AgentStepResponse
+    AssessmentResponse:
+      properties:
+        assessmentId:
+          type: string
+          title: Assessmentid
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        status:
+          $ref: '#/components/schemas/AssessmentStatus'
+        ratePercent:
+          type: number
+          title: Ratepercent
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/DecisionResponse'
+          - type: 'null'
+        affordability:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Affordability
+        collateral:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Collateral
+        risk:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Risk
+        steps:
+          items:
+            $ref: '#/components/schemas/AgentStepResponse'
+          type: array
+          title: Steps
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        finishedAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finishedat
+      type: object
+      required:
+      - assessmentId
+      - loanApplicationId
+      - status
+      - ratePercent
+      - decision
+      - affordability
+      - collateral
+      - risk
+      - steps
+      - error
+      - createdAt
+      - finishedAt
+      title: AssessmentResponse
+      description: 'Response of `POST .../assessments` and `GET .../assessments/latest`: the verdict and how it was reached.'
+    AssessmentStatus:
+      type: string
+      enum:
+      - queued
+      - running
+      - done
+      - failed
+      title: AssessmentStatus
+      description: State of an AI committee run; mirrors the AL-AI Engine job status.
+    AssessmentSummaryResponse:
+      properties:
+        assessmentId:
+          type: string
+          title: Assessmentid
+        status:
+          $ref: '#/components/schemas/AssessmentStatus'
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/AIDecision'
+          - type: 'null'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        automatic:
+          type: boolean
+          title: Automatic
+        riskTier:
+          anyOf:
+          - $ref: '#/components/schemas/RiskTier'
+          - type: 'null'
+        riskScore:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Riskscore
+        approvalChancePercent:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Approvalchancepercent
+        dtiPercent:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Dtipercent
+        ltiMultiple:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ltimultiple
+        ltvPercent:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Ltvpercent
+        valuationEstimate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Valuationestimate
+        overvalued:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Overvalued
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        finishedAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finishedat
+      type: object
+      required:
+      - assessmentId
+      - status
+      - decision
+      - reason
+      - automatic
+      - riskTier
+      - riskScore
+      - approvalChancePercent
+      - dtiPercent
+      - ltiMultiple
+      - ltvPercent
+      - valuationEstimate
+      - overvalued
+      - error
+      - createdAt
+      - finishedAt
+      title: AssessmentSummaryResponse
+      description: Short summary of the latest AI committee run; the full reasoning is at `.../assessments/latest`.
+    AuditPackFormat:
+      type: string
+      enum:
+      - pdf
+      - csv
+      title: AuditPackFormat
+    BankOfficerAssignBody:
+      properties:
+        bankOfficerId:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Bankofficerid
+      type: object
+      required:
+      - bankOfficerId
+      title: BankOfficerAssignBody
+      description: Body of `PUT /api/v1/loan-applications/{id}/bank-officer`
+    BerRating:
+      type: string
+      enum:
+      - A1
+      - A2
+      - A3
+      - B1
+      - B2
+      - B3
+      - C1
+      - C2
+      - C3
+      - D1
+      - D2
+      - E1
+      - E2
+      - F
+      - G
+      title: BerRating
+      description: 15 Irish Building Energy Rating grades, best to worst (`A1`, `A2`, ..., `G`)
+    BorrowerInfoResponse:
+      properties:
+        uid:
+          type: string
+          title: Uid
+        fullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fullname
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+      type: object
+      required:
+      - uid
+      - fullName
+      - email
+      - phone
+      title: BorrowerInfoResponse
+    ConversationCreateBody:
+      properties:
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        withOfficer:
+          type: boolean
+          title: Withofficer
+          description: '`true` to talk to the assigned bank officer; `false` (default) to talk to the broker'
+          default: false
+      type: object
+      required:
+      - loanApplicationId
+      title: ConversationCreateBody
+      description: Body of `POST /api/v1/conversations` (borrower only).
+    ConversationResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        interlocutor:
+          anyOf:
+          - $ref: '#/components/schemas/OtherParticipant'
+          - type: 'null'
+        unread:
+          type: boolean
+          title: Unread
+          default: false
+        lastMessagePreview:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastmessagepreview
+        lastSenderId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lastsenderid
+        lastMessageAt:
+          type: string
+          format: date-time
+          title: Lastmessageat
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+      type: object
+      required:
+      - id
+      - loanApplicationId
+      - lastMessageAt
+      - createdAt
+      title: ConversationResponse
+    County:
+      type: string
+      enum:
+      - Carlow
+      - Cavan
+      - Clare
+      - Cork
+      - Donegal
+      - Dublin
+      - Galway
+      - Kerry
+      - Kildare
+      - Kilkenny
+      - Laois
+      - Leitrim
+      - Limerick
+      - Longford
+      - Louth
+      - Mayo
+      - Meath
+      - Monaghan
+      - Offaly
+      - Roscommon
+      - Sligo
+      - Tipperary
+      - Waterford
+      - Westmeath
+      - Wexford
+      - Wicklow
+      title: County
+      description: 26 counties of the Republic of Ireland. Match `county_centroid.json` of AL-AI Engine.
+    DecisionResponse:
+      properties:
+        decision:
+          $ref: '#/components/schemas/AIDecision'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        conditions:
+          items:
+            type: string
+          type: array
+          title: Conditions
+        keyRisks:
+          items:
+            type: string
+          type: array
+          title: Keyrisks
+        automatic:
+          type: boolean
+          title: Automatic
+        votes:
+          items:
+            $ref: '#/components/schemas/VoteResponse'
+          type: array
+          title: Votes
+      type: object
+      required:
+      - decision
+      - reason
+      - conditions
+      - keyRisks
+      - automatic
+      - votes
+      title: DecisionResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LoanApplicationCreateBody:
+      properties:
+        brokerId:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Brokerid
+        annualGrossIncome:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Annualgrossincome
+        annualDebtRepayments:
+          type: number
+          minimum: 0.0
+          title: Annualdebtrepayments
+        deposit:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Deposit
+        termYears:
+          type: integer
+          maximum: 40.0
+          minimum: 5.0
+          title: Termyears
+        firstTimeBuyer:
+          type: boolean
+          title: Firsttimebuyer
+        propertySpec:
+          $ref: '#/components/schemas/PropertySpecBody'
+      type: object
+      required:
+      - annualGrossIncome
+      - annualDebtRepayments
+      - deposit
+      - termYears
+      - firstTimeBuyer
+      - propertySpec
+      title: LoanApplicationCreateBody
+      description: Body of `POST /api/v1/loan-applications.
+    LoanApplicationResponse:
+      properties:
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        borrowerId:
+          type: string
+          title: Borrowerid
+        borrowerFullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Borrowerfullname
+        brokerId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brokerid
+        bankOfficerId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bankofficerid
+        annualGrossIncome:
+          type: number
+          title: Annualgrossincome
+        annualDebtRepayments:
+          type: number
+          title: Annualdebtrepayments
+        deposit:
+          type: number
+          title: Deposit
+        loanAmount:
+          type: number
+          title: Loanamount
+        termYears:
+          type: integer
+          title: Termyears
+        firstTimeBuyer:
+          type: boolean
+          title: Firsttimebuyer
+        ltv:
+          type: number
+          title: Ltv
+        ltvGroup:
+          $ref: '#/components/schemas/LtvGroup'
+        propertySpec:
+          $ref: '#/components/schemas/PropertySpecResponse'
+        status:
+          $ref: '#/components/schemas/LoanApplicationStatus'
+        statusHistory:
+          items:
+            $ref: '#/components/schemas/StatusChangeResponse'
+          type: array
+          title: Statushistory
+        assessmentId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assessmentid
+        riskTier:
+          anyOf:
+          - $ref: '#/components/schemas/RiskTier'
+          - type: 'null'
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/UnderwritingDecisionResponse'
+          - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        updatedAt:
+          type: string
+          format: date-time
+          title: Updatedat
+      type: object
+      required:
+      - loanApplicationId
+      - borrowerId
+      - borrowerFullName
+      - brokerId
+      - bankOfficerId
+      - annualGrossIncome
+      - annualDebtRepayments
+      - deposit
+      - loanAmount
+      - termYears
+      - firstTimeBuyer
+      - ltv
+      - ltvGroup
+      - propertySpec
+      - status
+      - statusHistory
+      - assessmentId
+      - riskTier
+      - decision
+      - createdAt
+      - updatedAt
+      title: LoanApplicationResponse
+    LoanApplicationStatus:
+      type: string
+      enum:
+      - Applied
+      - AI Deliberated
+      - Underwriter Approved
+      - Funded
+      - Closed
+      title: LoanApplicationStatus
+    LoanDocumentResponse:
+      properties:
+        documentId:
+          type: string
+          title: Documentid
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        contentType:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Contenttype
+        sizeBytes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Sizebytes
+        uploadedById:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Uploadedbyid
+        uploadedAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Uploadedat
+      type: object
+      required:
+      - documentId
+      - name
+      - category
+      - contentType
+      - sizeBytes
+      - uploadedById
+      - uploadedAt
+      title: LoanDocumentResponse
+    LoanFileResponse:
+      properties:
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        borrowerId:
+          type: string
+          title: Borrowerid
+        borrowerFullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Borrowerfullname
+        brokerId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brokerid
+        bankOfficerId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bankofficerid
+        annualGrossIncome:
+          type: number
+          title: Annualgrossincome
+        annualDebtRepayments:
+          type: number
+          title: Annualdebtrepayments
+        deposit:
+          type: number
+          title: Deposit
+        loanAmount:
+          type: number
+          title: Loanamount
+        termYears:
+          type: integer
+          title: Termyears
+        firstTimeBuyer:
+          type: boolean
+          title: Firsttimebuyer
+        ltv:
+          type: number
+          title: Ltv
+        ltvGroup:
+          $ref: '#/components/schemas/LtvGroup'
+        propertySpec:
+          $ref: '#/components/schemas/PropertySpecResponse'
+        status:
+          $ref: '#/components/schemas/LoanApplicationStatus'
+        statusHistory:
+          items:
+            $ref: '#/components/schemas/StatusChangeResponse'
+          type: array
+          title: Statushistory
+        assessmentId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assessmentid
+        riskTier:
+          anyOf:
+          - $ref: '#/components/schemas/RiskTier'
+          - type: 'null'
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/UnderwritingDecisionResponse'
+          - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        updatedAt:
+          type: string
+          format: date-time
+          title: Updatedat
+        borrower:
+          $ref: '#/components/schemas/BorrowerInfoResponse'
+        documents:
+          items:
+            $ref: '#/components/schemas/LoanDocumentResponse'
+          type: array
+          title: Documents
+        latestAssessment:
+          anyOf:
+          - $ref: '#/components/schemas/AssessmentSummaryResponse'
+          - type: 'null'
+      type: object
+      required:
+      - loanApplicationId
+      - borrowerId
+      - borrowerFullName
+      - brokerId
+      - bankOfficerId
+      - annualGrossIncome
+      - annualDebtRepayments
+      - deposit
+      - loanAmount
+      - termYears
+      - firstTimeBuyer
+      - ltv
+      - ltvGroup
+      - propertySpec
+      - status
+      - statusHistory
+      - assessmentId
+      - riskTier
+      - decision
+      - createdAt
+      - updatedAt
+      - borrower
+      - documents
+      - latestAssessment
+      title: LoanFileResponse
+      description: 'Response of `GET /api/v1/loan-applications/{id}`: the application plus what the loan file page shows.'
+    LtvGroup:
+      type: string
+      enum:
+      - up_to_60
+      - from_60_to_80
+      - from_80_to_90
+      - over_90
+      title: LtvGroup
+    MessageCreateBody:
+      properties:
+        text:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Text
+      type: object
+      required:
+      - text
+      title: MessageCreateBody
+      description: Body of `POST /api/v1/conversations/{id}/messages`.
+    MessageResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        senderId:
+          type: string
+          title: Senderid
+        senderRole:
+          $ref: '#/components/schemas/UserRole'
+        text:
+          type: string
+          title: Text
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        mine:
+          type: boolean
+          title: Mine
+      type: object
+      required:
+      - id
+      - senderId
+      - senderRole
+      - text
+      - createdAt
+      - mine
+      title: MessageResponse
+    OtherParticipant:
+      properties:
+        uid:
+          type: string
+          title: Uid
+        fullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fullname
+        role:
+          anyOf:
+          - $ref: '#/components/schemas/UserRole'
+          - type: 'null'
+      type: object
+      required:
+      - uid
+      title: OtherParticipant
+    PaginatedResponse_LoanApplicationResponse_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/LoanApplicationResponse'
+          type: array
+          title: Items
+        page:
+          type: integer
+          title: Page
+        pageSize:
+          type: integer
+          title: Pagesize
+        total:
+          type: integer
+          title: Total
+        totalPages:
+          type: integer
+          title: Totalpages
+        hasNext:
+          type: boolean
+          title: Hasnext
+        hasPrevious:
+          type: boolean
+          title: Hasprevious
+      type: object
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      - totalPages
+      - hasNext
+      - hasPrevious
+      title: PaginatedResponse[LoanApplicationResponse]
+    PaginatedResponse_PaymentResponse_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PaymentResponse'
+          type: array
+          title: Items
+        page:
+          type: integer
+          title: Page
+        pageSize:
+          type: integer
+          title: Pagesize
+        total:
+          type: integer
+          title: Total
+        totalPages:
+          type: integer
+          title: Totalpages
+        hasNext:
+          type: boolean
+          title: Hasnext
+        hasPrevious:
+          type: boolean
+          title: Hasprevious
+      type: object
+      required:
+      - items
+      - page
+      - pageSize
+      - total
+      - totalPages
+      - hasNext
+      - hasPrevious
+      title: PaginatedResponse[PaymentResponse]
+    PaymentCheckoutResponse:
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentResponse'
+        stripe:
+          $ref: '#/components/schemas/StripePaymentSheetResponse'
+      type: object
+      required:
+      - payment
+      - stripe
+      title: PaymentCheckoutResponse
+      description: 'Response of `POST /api/v1/payments`: the (pending) payment and how to pay it.'
+    PaymentCreateBody:
+      properties:
+        loanApplicationId:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Loanapplicationid
+        feeType:
+          $ref: '#/components/schemas/PaymentFeeType'
+      type: object
+      required:
+      - loanApplicationId
+      - feeType
+      title: PaymentCreateBody
+      description: 'Body of `POST /api/v1/payments`. The amount is not sent: AL-Core sets it from the fee type.'
+    PaymentFeeType:
+      type: string
+      enum:
+      - application_verification
+      - appraisal_processing
+      title: PaymentFeeType
+      description: Fees a retail borrower can pay for a loan application (amounts in `payments.fees`).
+    PaymentProvider:
+      type: string
+      enum:
+      - stripe
+      title: PaymentProvider
+    PaymentResponse:
+      properties:
+        paymentId:
+          type: string
+          title: Paymentid
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        feeType:
+          $ref: '#/components/schemas/PaymentFeeType'
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        provider:
+          $ref: '#/components/schemas/PaymentProvider'
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        receiptUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Receipturl
+        failureReason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Failurereason
+        cardBrand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cardbrand
+        cardLast4:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cardlast4
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        paidAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paidat
+      type: object
+      required:
+      - paymentId
+      - loanApplicationId
+      - feeType
+      - amount
+      - currency
+      - provider
+      - status
+      - receiptUrl
+      - failureReason
+      - cardBrand
+      - cardLast4
+      - createdAt
+      - paidAt
+      title: PaymentResponse
+    PaymentStatus:
+      type: string
+      enum:
+      - pending
+      - succeeded
+      - failed
+      - refunded
+      title: PaymentStatus
+      description: Lifecycle of a payment; only the Stripe webhook moves it past `pending`.
+    PropertySpecBody:
+      properties:
+        county:
+          $ref: '#/components/schemas/County'
+        address:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Address
+        floorAreaM2:
+          type: number
+          maximum: 600.0
+          minimum: 20.0
+          title: Flooraream2
+        bedrooms:
+          type: integer
+          maximum: 10.0
+          minimum: 1.0
+          title: Bedrooms
+        bathrooms:
+          type: integer
+          maximum: 10.0
+          minimum: 0.0
+          title: Bathrooms
+        propertyType:
+          $ref: '#/components/schemas/PropertyType'
+        ber:
+          anyOf:
+          - $ref: '#/components/schemas/BerRating'
+          - type: 'null'
+        latitude:
+          anyOf:
+          - type: number
+            maximum: 55.5
+            minimum: 51.4
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+            maximum: -5.8
+            minimum: -10.6
+          - type: 'null'
+          title: Longitude
+        askingPrice:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Askingprice
+      type: object
+      required:
+      - county
+      - floorAreaM2
+      - bedrooms
+      - bathrooms
+      - propertyType
+      - askingPrice
+      title: PropertySpecBody
+      description: Part of the body of `POST /api/v1/loan-applications.
+    PropertySpecResponse:
+      properties:
+        county:
+          $ref: '#/components/schemas/County'
+        address:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Address
+        floorAreaM2:
+          type: number
+          title: Flooraream2
+        bedrooms:
+          type: integer
+          title: Bedrooms
+        bathrooms:
+          type: integer
+          title: Bathrooms
+        propertyType:
+          $ref: '#/components/schemas/PropertyType'
+        ber:
+          anyOf:
+          - $ref: '#/components/schemas/BerRating'
+          - type: 'null'
+        latitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Longitude
+        askingPrice:
+          type: number
+          title: Askingprice
+      type: object
+      required:
+      - county
+      - address
+      - floorAreaM2
+      - bedrooms
+      - bathrooms
+      - propertyType
+      - ber
+      - latitude
+      - longitude
+      - askingPrice
+      title: PropertySpecResponse
+    PropertyType:
+      type: string
+      enum:
+      - Detached
+      - Semi-D
+      - Terrace
+      - End of Terrace
+      - Apartment
+      - Bungalow
+      - Townhouse
+      - Duplex
+      - Studio
+      title: PropertyType
+    ReviewCreateBody:
+      properties:
+        rating:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Rating
+          examples:
+          - 5
+        comment:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Comment
+          examples:
+          - Quick answers from my broker
+      type: object
+      required:
+      - rating
+      title: ReviewCreateBody
+      description: Body of `POST /api/v1/reviews`.
+    ReviewResponse:
+      properties:
+        reviewId:
+          type: string
+          title: Reviewid
+        userId:
+          type: string
+          title: Userid
+        rating:
+          type: integer
+          title: Rating
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+      type: object
+      required:
+      - reviewId
+      - userId
+      - rating
+      - comment
+      - createdAt
+      title: ReviewResponse
+    RiskTier:
+      type: string
+      enum:
+      - Low
+      - Medium
+      - High
+      title: RiskTier
+    SignInProvider:
+      type: string
+      enum:
+      - password
+      - google.com
+      - github.com
+      - other
+      title: SignInProvider
+    StatusChangeResponse:
+      properties:
+        status:
+          $ref: '#/components/schemas/LoanApplicationStatus'
+        changedById:
+          type: string
+          title: Changedbyid
+        changedAt:
+          type: string
+          format: date-time
+          title: Changedat
+      type: object
+      required:
+      - status
+      - changedById
+      - changedAt
+      title: StatusChangeResponse
+    StressTestCreateBody:
+      properties:
+        rateShockBps:
+          type: integer
+          maximum: 300.0
+          minimum: 0.0
+          title: Rateshockbps
+          default: 0
+          examples:
+          - 200
+        priceChangePercent:
+          type: number
+          maximum: 0.0
+          minimum: -60.0
+          title: Pricechangepercent
+          default: 0
+          examples:
+          - -15
+        statuses:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/LoanApplicationStatus'
+            type: array
+          - type: 'null'
+          title: Statuses
+          description: Portfolio filter; every status except `Closed` by default
+        loanApplicationIds:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 300
+            minItems: 1
+          - type: 'null'
+          title: Loanapplicationids
+          description: Concrete applications; `statuses` is ignored then
+      type: object
+      title: StressTestCreateBody
+      description: Body of `POST /api/v1/stress-tests`.
+    StressTestListItemResponse:
+      properties:
+        stressTestId:
+          type: string
+          title: Stresstestid
+        rateShockBps:
+          type: integer
+          title: Rateshockbps
+        priceChangePercent:
+          type: number
+          title: Pricechangepercent
+        summary:
+          $ref: '#/components/schemas/StressTestSummaryResponse'
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+      type: object
+      required:
+      - stressTestId
+      - rateShockBps
+      - priceChangePercent
+      - summary
+      - createdAt
+      title: StressTestListItemResponse
+    StressTestResponse:
+      properties:
+        stressTestId:
+          type: string
+          title: Stresstestid
+        statuses:
+          items:
+            $ref: '#/components/schemas/LoanApplicationStatus'
+          type: array
+          title: Statuses
+        loanApplicationIds:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Loanapplicationids
+        rateShockBps:
+          type: integer
+          title: Rateshockbps
+        priceChangePercent:
+          type: number
+          title: Pricechangepercent
+        baseRatePercent:
+          type: number
+          title: Baseratepercent
+        dtiLimitPercent:
+          type: number
+          title: Dtilimitpercent
+        summary:
+          $ref: '#/components/schemas/StressTestSummaryResponse'
+        results:
+          items:
+            $ref: '#/components/schemas/StressTestResultResponse'
+          type: array
+          title: Results
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+      type: object
+      required:
+      - stressTestId
+      - statuses
+      - loanApplicationIds
+      - rateShockBps
+      - priceChangePercent
+      - baseRatePercent
+      - dtiLimitPercent
+      - summary
+      - results
+      - createdAt
+      title: StressTestResponse
+    StressTestResultResponse:
+      properties:
+        loanApplicationId:
+          type: string
+          title: Loanapplicationid
+        borrowerId:
+          type: string
+          title: Borrowerid
+        borrowerFullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Borrowerfullname
+        loanAmount:
+          type: number
+          title: Loanamount
+        propertyValue:
+          type: number
+          title: Propertyvalue
+        baseRepayment:
+          type: number
+          title: Baserepayment
+        stressedRepayment:
+          type: number
+          title: Stressedrepayment
+        baseDtiPercent:
+          type: number
+          title: Basedtipercent
+        stressedDtiPercent:
+          type: number
+          title: Stresseddtipercent
+        affordable:
+          type: boolean
+          title: Affordable
+        baseLtvPercent:
+          type: number
+          title: Baseltvpercent
+        stressedLtvPercent:
+          type: number
+          title: Stressedltvpercent
+        negativeEquity:
+          type: boolean
+          title: Negativeequity
+      type: object
+      required:
+      - loanApplicationId
+      - borrowerId
+      - borrowerFullName
+      - loanAmount
+      - propertyValue
+      - baseRepayment
+      - stressedRepayment
+      - baseDtiPercent
+      - stressedDtiPercent
+      - affordable
+      - baseLtvPercent
+      - stressedLtvPercent
+      - negativeEquity
+      title: StressTestResultResponse
+    StressTestSummaryResponse:
+      properties:
+        applicationsTested:
+          type: integer
+          title: Applicationstested
+        notAffordableCount:
+          type: integer
+          title: Notaffordablecount
+        negativeEquityCount:
+          type: integer
+          title: Negativeequitycount
+        exposureAtRisk:
+          type: number
+          title: Exposureatrisk
+      type: object
+      required:
+      - applicationsTested
+      - notAffordableCount
+      - negativeEquityCount
+      - exposureAtRisk
+      title: StressTestSummaryResponse
+      description: Totals computed from `results` (not stored).
+    StripePaymentSheetResponse:
+      properties:
+        publishableKey:
+          type: string
+          title: Publishablekey
+        paymentIntentClientSecret:
+          type: string
+          title: Paymentintentclientsecret
+        merchantDisplayName:
+          type: string
+          title: Merchantdisplayname
+      type: object
+      required:
+      - publishableKey
+      - paymentIntentClientSecret
+      - merchantDisplayName
+      title: StripePaymentSheetResponse
+      description: What the Android app needs to open Stripe's PaymentSheet; never contains the secret key.
+    SupportTicketCategory:
+      type: string
+      enum:
+      - account
+      - loan_application
+      - payment
+      - technical
+      - other
+      title: SupportTicketCategory
+    SupportTicketCreateBody:
+      properties:
+        category:
+          $ref: '#/components/schemas/SupportTicketCategory'
+        description:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          title: Description
+          examples:
+          - I uploaded the wrong payslip
+        loanApplicationId:
+          anyOf:
+          - type: string
+            maxLength: 128
+          - type: 'null'
+          title: Loanapplicationid
+          description: Required for the `loan_application` category; must be empty for the others
+      type: object
+      required:
+      - category
+      - description
+      title: SupportTicketCreateBody
+      description: Body of `POST /api/v1/support-tickets`.
+    SupportTicketResponse:
+      properties:
+        supportTicketId:
+          type: string
+          title: Supportticketid
+        userId:
+          type: string
+          title: Userid
+        category:
+          $ref: '#/components/schemas/SupportTicketCategory'
+        description:
+          type: string
+          title: Description
+        loanApplicationId:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Loanapplicationid
+        status:
+          $ref: '#/components/schemas/SupportTicketStatus'
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        resolvedAt:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolvedat
+      type: object
+      required:
+      - supportTicketId
+      - userId
+      - category
+      - description
+      - loanApplicationId
+      - status
+      - createdAt
+      - resolvedAt
+      title: SupportTicketResponse
+    SupportTicketStatus:
+      type: string
+      enum:
+      - open
+      - resolved
+      title: SupportTicketStatus
+    UnderwritingDecisionCreateBody:
+      properties:
+        outcome:
+          $ref: '#/components/schemas/UnderwritingOutcome'
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          title: Reason
+        conditions:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Conditions
+      type: object
+      required:
+      - outcome
+      - reason
+      title: UnderwritingDecisionCreateBody
+      description: Body of `PUT /api/v1/loan-applications/{id}/decision`
+    UnderwritingDecisionResponse:
+      properties:
+        outcome:
+          $ref: '#/components/schemas/UnderwritingOutcome'
+        reason:
+          type: string
+          title: Reason
+        conditions:
+          items:
+            type: string
+          type: array
+          title: Conditions
+        decidedBy:
+          type: string
+          title: Decidedby
+        decidedAt:
+          type: string
+          format: date-time
+          title: Decidedat
+      type: object
+      required:
+      - outcome
+      - reason
+      - conditions
+      - decidedBy
+      - decidedAt
+      title: UnderwritingDecisionResponse
+    UnderwritingOutcome:
+      type: string
+      enum:
+      - Approved
+      - Declined
+      title: UnderwritingOutcome
+    UserCreateBody:
+      properties:
+        fullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fullname
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+      type: object
+      title: UserCreateBody
+      description: 'Body of `POST /api/v1/users/me`.
+
+
+        Contains ONLY fields, that the end-user may set themselves. Therefore, uid, email, email_verified, sign_in_provider
+        and role
+
+        are NOT here, because the server takes them from the verified token (Firebase Auth) or decides them itself, etc.'
+    UserResponse:
+      properties:
+        uid:
+          type: string
+          title: Uid
+        email:
+          type: string
+          title: Email
+        emailVerified:
+          type: boolean
+          title: Emailverified
+          default: false
+        photoUrl:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photourl
+        signInProvider:
+          $ref: '#/components/schemas/SignInProvider'
+        role:
+          $ref: '#/components/schemas/UserRole'
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        fullName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fullname
+        createdAt:
+          type: string
+          format: date-time
+          title: Createdat
+        updatedAt:
+          type: string
+          format: date-time
+          title: Updatedat
+      type: object
+      required:
+      - uid
+      - email
+      - signInProvider
+      - role
+      - createdAt
+      - updatedAt
+      title: UserResponse
+      description: Response body of `GET /api/v1/users/me`, `POST /api/v1/users/me`.
+    UserRole:
+      type: string
+      enum:
+      - ''
+      - retail_borrower
+      - mortgage_broker
+      - underwriting_bank_officer
+      title: UserRole
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VoteResponse:
+      properties:
+        provider:
+          type: string
+          title: Provider
+        decision:
+          anyOf:
+          - $ref: '#/components/schemas/AIDecision'
+          - type: 'null'
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - provider
+      - decision
+      - reason
+      title: VoteResponse
+    WebhookAckResponse:
+      properties:
+        received:
+          type: boolean
+          title: Received
+          default: true
+      type: object
+      title: WebhookAckResponse
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

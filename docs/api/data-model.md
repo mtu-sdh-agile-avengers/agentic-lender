@@ -5,6 +5,10 @@ This document describes **data model** used, i.e.: **which** data is saved on th
 > [!TIP]
 > This file is used as a reference for all API contracts (generated `openapi.yaml`). You can get familiar with Pydantic
 > schemas (`./schemas`), models (`/models`) and routes (`./router`) inside of the API source code if you want more details.
+>
+> The OpenAPI description itself is [`openapi.yaml`](openapi.yaml), exported from the running code with
+> `uv run python -m src.scripts.export_openapi` (from `api/`); run it after changing a route or a schema and commit the
+> result (`--check` tells whether the file is out of date).
 
 <details>
 <summary>Table of contents (click to show)</summary>
@@ -739,11 +743,12 @@ the "portfolio" consists of all the loan applications with which he is related t
 
 ### payments
 
-Fees paid by retail borrower for the loan application, shown as payment history. Created by AL-Core
-when the borrower starts a payment (`POST /api/v1/payments/{loan_application_id}`); the payment state is updated only from the Stripe / Paypal webhook.
+Fees paid by a retail borrower for a loan application from AL-Mobile, shown as payment history. Created by AL-Core
+when the borrower starts a payment (`POST /api/v1/payments`); after that the payment is changed only by the Stripe
+webhook. Contract, flow and sandbox setup: [payments.md](payments.md).
 
 > [!IMPORTANT]
-> Card details never reach AL-Core or Firestore.
+> Card details never reach AL-Core or Firestore: the card is entered in Stripe's payment sheet on the phone.
 
 ```mermaid
 classDiagram
@@ -751,31 +756,36 @@ classDiagram
     <<collection>>
     payment_id: str
     user_id: str
-    fee_type: str
+    loan_application_id: str
+    fee_type: PaymentFeeType
     amount: float
     currency: str
     provider: PaymentProvider
-    payment_provider_id: PaymentProvider
+    payment_provider_id: str | None
     status: PaymentStatus
     receipt_url: str | None
     failure_reason: str | None
+    card_brand: str | None
+    card_last4: str | None
     created_at: datetime
     paid_at: datetime | None
   }
 ```
 
-| field               | type            | req | source | description                                                              |
-|---------------------|-----------------|-----|--------|--------------------------------------------------------------------------|
-| payment_id          | str             | x   | core   | Payment uid; document name, not a field                                  |
-| user_id             | str             | x   | auth   | uid of the person who making the payment (`retail_borrower` is expected) |
-| loan_application_id | str             | x   | client | Loan application the fee is paiid for                                    |                
-| fee_type            | PaymentFeeType  | x   | client | (fast-track) `appraisal_processing` or `application_verification`        |
-| amount              | float           | x   | core   | Set by AL-Core for each `fee_type` separatly; in euro                    |
-| currency            | str             | x   | core   | Always euro                                                              |
-| provider            | PaymentProvider | x   | client | `stripe` or `paypal`                                                     |
-| payment_provider_id | str             | x   | psp    | Payment uid from the provider; used to mach webhooks to this payment     |
-| status              | PaymentStatus   | x   | psp    | `pending`, `succeded`, `failed`, `refunded`                              |
-| receipt_url         | str             | ?   | psp    | Link to the provider's receipt; evidence of payment; null until paid     |
-| failure_reason      | str             | ?   | psp    | Reason of failure; null until `failed`                                   |
-| created_at          | datetime        | x   | core   | Payment creation time stamp                                              |
-| paid_at             | datetime        | ?   | psp    | Payment success time stamp; only if it `succeded`                        |
+| field               | type            | req | source | description                                                                               |
+|---------------------|-----------------|-----|--------|-------------------------------------------------------------------------------------------|
+| payment_id          | str             | x   | core   | Payment uid; document name, not a field                                                   |
+| user_id             | str             | x   | auth   | uid of the borrower who pays                                                              |
+| loan_application_id | str             | x   | client | Loan application the fee is paid for; must be the borrower's own                         |
+| fee_type            | PaymentFeeType  | x   | client | `application_verification` (€49) or `appraisal_processing` (fast-track appraisal, €149)  |
+| amount              | float           | x   | core   | Set by AL-Core from `fee_type` (`api/src/payments/fees.py`), never by the client; in euro |
+| currency            | str             | x   | core   | Always `eur`                                                                              |
+| provider            | PaymentProvider | x   | core   | Always `stripe`                                                                           |
+| payment_provider_id | str             | ?   | psp    | Stripe PaymentIntent ID (`pi_...`); matches webhook events to this payment; never returned by the API |
+| status              | PaymentStatus   | x   | psp    | `pending`, `succeeded`, `failed`, `refunded`                                              |
+| receipt_url         | str             | ?   | psp    | Stripe receipt; evidence of payment; null until paid                                      |
+| failure_reason      | str             | ?   | psp    | Why the last attempt failed (e.g. card declined); null unless `failed`                    |
+| card_brand          | str             | ?   | psp    | e.g. `visa`; for the payment history; null until paid                                     |
+| card_last4          | str             | ?   | psp    | Last 4 digits of the card; null until paid                                                |
+| created_at          | datetime        | x   | core   | Payment creation time stamp                                                               |
+| paid_at             | datetime        | ?   | psp    | When Stripe confirmed the payment; null unless `succeeded`                                |

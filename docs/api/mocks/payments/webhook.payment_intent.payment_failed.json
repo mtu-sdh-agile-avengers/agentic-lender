@@ -1,0 +1,28 @@
+{
+  "id": "evt_3MockEventFailed0002",
+  "object": "event",
+  "type": "payment_intent.payment_failed",
+  "created": 1795512600,
+  "livemode": false,
+  "data": {
+    "object": {
+      "id": "pi_3MockPaymentIntent0002",
+      "object": "payment_intent",
+      "amount": 4900,
+      "currency": "eur",
+      "status": "requires_payment_method",
+      "last_payment_error": {
+        "type": "card_error",
+        "code": "card_declined",
+        "decline_code": "generic_decline",
+        "message": "Your card was declined."
+      },
+      "metadata": {
+        "payment_id": "demo-payment-0002",
+        "loan_application_id": "demo-app-0001",
+        "fee_type": "application_verification",
+        "user_id": "demo-borrower"
+      }
+    }
+  }
+}
